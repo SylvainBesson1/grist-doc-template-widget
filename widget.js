@@ -1547,6 +1547,13 @@ function initEditor() {
     askBeforePasteHTML: false,
     askBeforePasteFromWord: false,
     defaultActionOnPaste: 'insert_clear_html',
+    // Allow clicking between tables to insert content
+    enter: 'p',
+    enterBlock: 'p',
+    addNewLine: true,
+    addNewLineOnDBLClick: true,
+    addNewLineDeltaShow: 20,
+    addNewLineTagsTriggers: ['table', 'iframe', 'img', 'hr', 'jodit'],
     controls: {
       pagebreak: {
         name: 'pagebreak',

@@ -3393,6 +3393,44 @@ async function renderHtmlToPdfPages(html, pdf, pageWidth, pageHeight, pageSize) 
           cell.style.padding = '4px 8px';
           cell.style.display = 'table-cell';
           cell.style.visibility = 'visible';
+          
+          // Handle vertical text for PDF - html2canvas doesn't support writing-mode
+          // Convert to rotated text using transform instead
+          var writingMode = cell.style.writingMode;
+          if (writingMode === 'vertical-rl' || writingMode === 'vertical-lr') {
+            // Get the text content
+            var textContent = cell.textContent || cell.innerText;
+            var cellHeight = cell.offsetHeight || 60;
+            var cellWidth = cell.offsetWidth || 30;
+            
+            // Reset writing-mode and use transform rotation instead
+            cell.style.writingMode = 'horizontal-tb';
+            cell.style.textOrientation = 'mixed';
+            
+            // Create a wrapper span with rotation
+            var wrapper = document.createElement('span');
+            wrapper.style.display = 'inline-block';
+            wrapper.style.whiteSpace = 'nowrap';
+            
+            if (writingMode === 'vertical-rl') {
+              // Bottom to top: rotate -90deg
+              wrapper.style.transform = 'rotate(-90deg)';
+              wrapper.style.transformOrigin = 'center center';
+            } else {
+              // Top to bottom (vertical-lr with 180deg): rotate 90deg
+              wrapper.style.transform = 'rotate(90deg)';
+              wrapper.style.transformOrigin = 'center center';
+            }
+            
+            wrapper.textContent = textContent;
+            cell.innerHTML = '';
+            cell.appendChild(wrapper);
+            
+            // Adjust cell dimensions for rotated content
+            cell.style.verticalAlign = 'middle';
+            cell.style.textAlign = 'center';
+            cell.style.overflow = 'visible';
+          }
         });
         // Ensure images are visible
         var clonedImages = clonedElement.querySelectorAll('img');

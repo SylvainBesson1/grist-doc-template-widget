@@ -1670,6 +1670,178 @@ function initEditor() {
           );
         }
       },
+      tablelayout: {
+        name: 'tablelayout',
+        iconURL: '',
+        tooltip: currentLang === 'fr' ? 'Mise en page (tableaux côte à côte)' : 'Layout (side by side tables)',
+        exec: function(editor) {
+          var dialog = document.createElement('div');
+          dialog.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:white;padding:20px;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.3);z-index:10000;min-width:320px;';
+          dialog.innerHTML = '\
+            <h3 style="margin:0 0 15px 0;font-size:1.1em;">' + (currentLang === 'fr' ? 'Mise en page avec tableaux' : 'Table Layout') + '</h3>\
+            <div style="margin-bottom:15px;">\
+              <label style="display:block;margin-bottom:8px;font-weight:500;">' + (currentLang === 'fr' ? 'Type de mise en page' : 'Layout type') + '</label>\
+              <select id="layout-type" style="width:100%;padding:8px;border:1px solid #e2e8f0;border-radius:4px;">\
+                <option value="2col">' + (currentLang === 'fr' ? '2 colonnes (50% / 50%)' : '2 columns (50% / 50%)') + '</option>\
+                <option value="3col">' + (currentLang === 'fr' ? '3 colonnes (33% / 33% / 33%)' : '3 columns (33% / 33% / 33%)') + '</option>\
+                <option value="sidebar-left">' + (currentLang === 'fr' ? 'Barre latérale gauche (30% / 70%)' : 'Left sidebar (30% / 70%)') + '</option>\
+                <option value="sidebar-right">' + (currentLang === 'fr' ? 'Barre latérale droite (70% / 30%)' : 'Right sidebar (70% / 30%)') + '</option>\
+              </select>\
+            </div>\
+            <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:4px;padding:10px;margin-bottom:15px;font-size:12px;">\
+              <strong>💡 ' + (currentLang === 'fr' ? 'Astuce' : 'Tip') + ':</strong><br>\
+              ' + (currentLang === 'fr' ? 'Vous pouvez insérer un tableau dans chaque cellule pour créer des tableaux côte à côte.' : 'You can insert a table in each cell to create side-by-side tables.') + '\
+            </div>\
+            <div style="display:flex;gap:10px;">\
+              <button id="layout-insert" style="flex:1;padding:10px;background:#3b82f6;color:white;border:none;border-radius:6px;cursor:pointer;">' + (currentLang === 'fr' ? 'Insérer' : 'Insert') + '</button>\
+              <button id="layout-cancel" style="flex:1;padding:10px;background:#f1f5f9;border:none;border-radius:6px;cursor:pointer;">' + (currentLang === 'fr' ? 'Annuler' : 'Cancel') + '</button>\
+            </div>\
+          ';
+          
+          var overlay = document.createElement('div');
+          overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.3);z-index:9999;';
+          
+          document.body.appendChild(overlay);
+          document.body.appendChild(dialog);
+          
+          dialog.querySelector('#layout-insert').addEventListener('click', function() {
+            var type = dialog.querySelector('#layout-type').value;
+            var html = '';
+            var cellStyle = 'border:none;vertical-align:top;padding:10px;';
+            
+            if (type === '2col') {
+              html = '<table style="width:100%;border-collapse:collapse;border:none;"><tr>' +
+                '<td style="' + cellStyle + 'width:50%;">' + (currentLang === 'fr' ? '[Colonne 1]' : '[Column 1]') + '</td>' +
+                '<td style="' + cellStyle + 'width:50%;">' + (currentLang === 'fr' ? '[Colonne 2]' : '[Column 2]') + '</td>' +
+                '</tr></table>';
+            } else if (type === '3col') {
+              html = '<table style="width:100%;border-collapse:collapse;border:none;"><tr>' +
+                '<td style="' + cellStyle + 'width:33%;">' + (currentLang === 'fr' ? '[Colonne 1]' : '[Column 1]') + '</td>' +
+                '<td style="' + cellStyle + 'width:34%;">' + (currentLang === 'fr' ? '[Colonne 2]' : '[Column 2]') + '</td>' +
+                '<td style="' + cellStyle + 'width:33%;">' + (currentLang === 'fr' ? '[Colonne 3]' : '[Column 3]') + '</td>' +
+                '</tr></table>';
+            } else if (type === 'sidebar-left') {
+              html = '<table style="width:100%;border-collapse:collapse;border:none;"><tr>' +
+                '<td style="' + cellStyle + 'width:30%;">' + (currentLang === 'fr' ? '[Barre latérale]' : '[Sidebar]') + '</td>' +
+                '<td style="' + cellStyle + 'width:70%;">' + (currentLang === 'fr' ? '[Contenu principal]' : '[Main content]') + '</td>' +
+                '</tr></table>';
+            } else if (type === 'sidebar-right') {
+              html = '<table style="width:100%;border-collapse:collapse;border:none;"><tr>' +
+                '<td style="' + cellStyle + 'width:70%;">' + (currentLang === 'fr' ? '[Contenu principal]' : '[Main content]') + '</td>' +
+                '<td style="' + cellStyle + 'width:30%;">' + (currentLang === 'fr' ? '[Barre latérale]' : '[Sidebar]') + '</td>' +
+                '</tr></table>';
+            }
+            
+            editor.selection.insertHTML(html);
+            
+            document.body.removeChild(dialog);
+            document.body.removeChild(overlay);
+          });
+          
+          dialog.querySelector('#layout-cancel').addEventListener('click', function() {
+            document.body.removeChild(dialog);
+            document.body.removeChild(overlay);
+          });
+          
+          overlay.addEventListener('click', function() {
+            document.body.removeChild(dialog);
+            document.body.removeChild(overlay);
+          });
+        }
+      },
+      nestedtable: {
+        name: 'nestedtable',
+        iconURL: '',
+        tooltip: currentLang === 'fr' ? 'Insérer un tableau dans la cellule' : 'Insert table in cell',
+        exec: function(editor) {
+          var selection = editor.selection;
+          var current = selection.current();
+          var cell = null;
+          if (current) {
+            cell = current.closest ? current.closest('td, th') : null;
+            if (!cell) {
+              var el = current;
+              while (el && el.tagName !== 'TD' && el.tagName !== 'TH') {
+                el = el.parentElement;
+              }
+              cell = el;
+            }
+          }
+          
+          if (!cell) {
+            alert(currentLang === 'fr' ? 'Placez le curseur dans une cellule de tableau' : 'Place cursor in a table cell');
+            return;
+          }
+          
+          var dialog = document.createElement('div');
+          dialog.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:white;padding:20px;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.3);z-index:10000;min-width:280px;';
+          dialog.innerHTML = '\
+            <h3 style="margin:0 0 15px 0;font-size:1.1em;">' + (currentLang === 'fr' ? 'Tableau imbriqué' : 'Nested Table') + '</h3>\
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:15px;">\
+              <div>\
+                <label style="display:block;margin-bottom:4px;font-weight:500;">' + (currentLang === 'fr' ? 'Lignes' : 'Rows') + '</label>\
+                <input type="number" id="nested-rows" value="3" min="1" max="20" style="width:100%;padding:8px;border:1px solid #e2e8f0;border-radius:4px;">\
+              </div>\
+              <div>\
+                <label style="display:block;margin-bottom:4px;font-weight:500;">' + (currentLang === 'fr' ? 'Colonnes' : 'Columns') + '</label>\
+                <input type="number" id="nested-cols" value="3" min="1" max="10" style="width:100%;padding:8px;border:1px solid #e2e8f0;border-radius:4px;">\
+              </div>\
+            </div>\
+            <div style="margin-bottom:15px;">\
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">\
+                <input type="checkbox" id="nested-header" checked>\
+                ' + (currentLang === 'fr' ? 'Première ligne en en-tête' : 'First row as header') + '\
+              </label>\
+            </div>\
+            <div style="display:flex;gap:10px;">\
+              <button id="nested-insert" style="flex:1;padding:10px;background:#3b82f6;color:white;border:none;border-radius:6px;cursor:pointer;">' + (currentLang === 'fr' ? 'Insérer' : 'Insert') + '</button>\
+              <button id="nested-cancel" style="flex:1;padding:10px;background:#f1f5f9;border:none;border-radius:6px;cursor:pointer;">' + (currentLang === 'fr' ? 'Annuler' : 'Cancel') + '</button>\
+            </div>\
+          ';
+          
+          var overlay = document.createElement('div');
+          overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.3);z-index:9999;';
+          
+          document.body.appendChild(overlay);
+          document.body.appendChild(dialog);
+          
+          dialog.querySelector('#nested-insert').addEventListener('click', function() {
+            var rows = parseInt(dialog.querySelector('#nested-rows').value) || 3;
+            var cols = parseInt(dialog.querySelector('#nested-cols').value) || 3;
+            var hasHeader = dialog.querySelector('#nested-header').checked;
+            
+            var html = '<table style="width:100%;border-collapse:collapse;">';
+            for (var r = 0; r < rows; r++) {
+              html += '<tr>';
+              for (var c = 0; c < cols; c++) {
+                var tag = (r === 0 && hasHeader) ? 'th' : 'td';
+                var style = 'border:1px solid #000;padding:4px 8px;';
+                if (r === 0 && hasHeader) {
+                  style += 'background:#f1f5f9;font-weight:bold;';
+                }
+                html += '<' + tag + ' style="' + style + '"></' + tag + '>';
+              }
+              html += '</tr>';
+            }
+            html += '</table>';
+            
+            editor.selection.insertHTML(html);
+            
+            document.body.removeChild(dialog);
+            document.body.removeChild(overlay);
+          });
+          
+          dialog.querySelector('#nested-cancel').addEventListener('click', function() {
+            document.body.removeChild(dialog);
+            document.body.removeChild(overlay);
+          });
+          
+          overlay.addEventListener('click', function() {
+            document.body.removeChild(dialog);
+            document.body.removeChild(overlay);
+          });
+        }
+      },
       columnwidth: {
         name: 'columnwidth',
         iconURL: '',
@@ -2043,7 +2215,8 @@ function initEditor() {
       'ul', 'ol', '|',
       'outdent', 'indent', '|',
       'align', 'verticaltext', '|',
-      'table', 'tableborder', 'cellborder', 'columnwidth', '|',
+      'table', 'tablelayout', 'nestedtable', '|',
+      'tableborder', 'cellborder', 'columnwidth', '|',
       'link', 'image', '|',
       'hr', 'insertparagraph', 'pagebreak', '|',
       'undo', 'redo', '|',

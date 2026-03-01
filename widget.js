@@ -1560,7 +1560,31 @@ function initEditor() {
         iconURL: '',
         tooltip: currentLang === 'fr' ? 'Insérer un paragraphe vide (pour espacer les tableaux)' : 'Insert empty paragraph (to space tables)',
         exec: function(editor) {
-          editor.selection.insertHTML('<p><br></p>');
+          // Check if cursor is inside a table
+          var current = editor.selection.current();
+          var table = null;
+          if (current) {
+            table = current.closest ? current.closest('table') : null;
+            if (!table) {
+              var el = current;
+              while (el && el.tagName !== 'TABLE') {
+                el = el.parentElement;
+              }
+              table = el;
+            }
+          }
+          
+          if (table) {
+            // Insert paragraph AFTER the table
+            var p = document.createElement('p');
+            p.innerHTML = '<br>';
+            table.parentNode.insertBefore(p, table.nextSibling);
+            // Move cursor to the new paragraph
+            editor.selection.setCursorIn(p);
+          } else {
+            // Not in a table, insert at cursor
+            editor.selection.insertHTML('<p><br></p>');
+          }
         }
       },
       pagebreak: {

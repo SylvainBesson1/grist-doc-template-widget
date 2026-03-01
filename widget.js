@@ -1670,6 +1670,120 @@ function initEditor() {
           );
         }
       },
+      cellborder: {
+        name: 'cellborder',
+        iconURL: '',
+        tooltip: currentLang === 'fr' ? 'Bordures de la cellule' : 'Cell borders',
+        exec: function(editor) {
+          var selection = editor.selection;
+          var current = selection.current();
+          var cell = null;
+          if (current) {
+            cell = current.closest ? current.closest('td, th') : null;
+            if (!cell) {
+              var el = current;
+              while (el && el.tagName !== 'TD' && el.tagName !== 'TH') {
+                el = el.parentElement;
+              }
+              cell = el;
+            }
+          }
+          
+          if (!cell) {
+            alert(currentLang === 'fr' ? 'Placez le curseur dans une cellule' : 'Place cursor in a cell');
+            return;
+          }
+          
+          // Parse current border style
+          var currentBorder = cell.style.border || '1px solid #000';
+          var isInvisible = currentBorder.includes('transparent') || currentBorder === 'none' || currentBorder === '';
+          var currentColor = '#000000';
+          var currentWidth = '1px';
+          var colorMatch = currentBorder.match(/#[0-9a-fA-F]{6}|#[0-9a-fA-F]{3}|rgb\([^)]+\)/);
+          if (colorMatch) currentColor = colorMatch[0];
+          var widthMatch = currentBorder.match(/(\d+)px/);
+          if (widthMatch) currentWidth = widthMatch[1] + 'px';
+          
+          var dialog = document.createElement('div');
+          dialog.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:white;padding:20px;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.3);z-index:10000;min-width:300px;';
+          dialog.innerHTML = '\
+            <h3 style="margin:0 0 15px 0;font-size:1.1em;">' + (currentLang === 'fr' ? 'Bordures de la cellule' : 'Cell Borders') + '</h3>\
+            <div style="margin-bottom:12px;">\
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">\
+                <input type="checkbox" id="cell-border-invisible" ' + (isInvisible ? 'checked' : '') + '>\
+                ' + (currentLang === 'fr' ? 'Bordures invisibles' : 'Invisible borders') + '\
+              </label>\
+            </div>\
+            <div id="cell-border-options" style="' + (isInvisible ? 'opacity:0.5;pointer-events:none;' : '') + '">\
+              <div style="margin-bottom:8px;font-weight:500;">' + (currentLang === 'fr' ? 'Couleur' : 'Color') + '</div>\
+              <input type="color" id="cell-border-color" value="' + currentColor + '" style="width:100%;height:36px;border:1px solid #e2e8f0;border-radius:4px;cursor:pointer;">\
+              <div style="margin-top:8px;font-weight:500;">' + (currentLang === 'fr' ? 'Épaisseur' : 'Thickness') + '</div>\
+              <select id="cell-border-width" style="width:100%;padding:8px;border:1px solid #e2e8f0;border-radius:4px;">\
+                <option value="1px" ' + (currentWidth === '1px' ? 'selected' : '') + '>1px</option>\
+                <option value="2px" ' + (currentWidth === '2px' ? 'selected' : '') + '>2px</option>\
+                <option value="3px" ' + (currentWidth === '3px' ? 'selected' : '') + '>3px</option>\
+                <option value="4px" ' + (currentWidth === '4px' ? 'selected' : '') + '>4px</option>\
+              </select>\
+              <div style="margin-top:8px;font-weight:500;">' + (currentLang === 'fr' ? 'Côtés' : 'Sides') + '</div>\
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:4px;">\
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="cell-border-top" checked> ' + (currentLang === 'fr' ? 'Haut' : 'Top') + '</label>\
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="cell-border-bottom" checked> ' + (currentLang === 'fr' ? 'Bas' : 'Bottom') + '</label>\
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="cell-border-left" checked> ' + (currentLang === 'fr' ? 'Gauche' : 'Left') + '</label>\
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="cell-border-right" checked> ' + (currentLang === 'fr' ? 'Droite' : 'Right') + '</label>\
+              </div>\
+            </div>\
+            <div style="display:flex;gap:10px;margin-top:15px;">\
+              <button id="cell-border-apply" style="flex:1;padding:10px;background:#3b82f6;color:white;border:none;border-radius:6px;cursor:pointer;">' + (currentLang === 'fr' ? 'Appliquer' : 'Apply') + '</button>\
+              <button id="cell-border-cancel" style="flex:1;padding:10px;background:#f1f5f9;border:none;border-radius:6px;cursor:pointer;">' + (currentLang === 'fr' ? 'Annuler' : 'Cancel') + '</button>\
+            </div>\
+          ';
+          
+          var overlay = document.createElement('div');
+          overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.3);z-index:9999;';
+          
+          document.body.appendChild(overlay);
+          document.body.appendChild(dialog);
+          
+          var invisibleCheck = dialog.querySelector('#cell-border-invisible');
+          var optionsGroup = dialog.querySelector('#cell-border-options');
+          
+          invisibleCheck.addEventListener('change', function() {
+            optionsGroup.style.opacity = this.checked ? '0.5' : '1';
+            optionsGroup.style.pointerEvents = this.checked ? 'none' : 'auto';
+          });
+          
+          dialog.querySelector('#cell-border-apply').addEventListener('click', function() {
+            var invisible = invisibleCheck.checked;
+            var color = dialog.querySelector('#cell-border-color').value;
+            var width = dialog.querySelector('#cell-border-width').value;
+            var top = dialog.querySelector('#cell-border-top').checked;
+            var bottom = dialog.querySelector('#cell-border-bottom').checked;
+            var left = dialog.querySelector('#cell-border-left').checked;
+            var right = dialog.querySelector('#cell-border-right').checked;
+            
+            var borderStyle = invisible ? 'none' : width + ' solid ' + color;
+            var noBorder = 'none';
+            
+            cell.style.borderTop = top ? borderStyle : noBorder;
+            cell.style.borderBottom = bottom ? borderStyle : noBorder;
+            cell.style.borderLeft = left ? borderStyle : noBorder;
+            cell.style.borderRight = right ? borderStyle : noBorder;
+            
+            document.body.removeChild(dialog);
+            document.body.removeChild(overlay);
+          });
+          
+          dialog.querySelector('#cell-border-cancel').addEventListener('click', function() {
+            document.body.removeChild(dialog);
+            document.body.removeChild(overlay);
+          });
+          
+          overlay.addEventListener('click', function() {
+            document.body.removeChild(dialog);
+            document.body.removeChild(overlay);
+          });
+        }
+      },
       tableborder: {
         name: 'tableborder',
         iconURL: '',
@@ -1828,7 +1942,7 @@ function initEditor() {
       'ul', 'ol', '|',
       'outdent', 'indent', '|',
       'align', 'verticaltext', '|',
-      'table', 'tableborder', '|',
+      'table', 'tableborder', 'cellborder', '|',
       'link', 'image', '|',
       'hr', 'insertparagraph', 'pagebreak', '|',
       'undo', 'redo', '|',

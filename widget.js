@@ -3312,18 +3312,20 @@ async function renderHtmlToPdfPages(html, pdf, pageWidth, pageHeight, pageSize) 
       // Handle vertical text BEFORE rendering - html2canvas doesn't support writing-mode
       var writingMode = cell.style.writingMode;
       if (writingMode === 'vertical-rl' || writingMode === 'vertical-lr') {
-        var textContent = cell.textContent || cell.innerText;
+        // Preserve the inner HTML content
+        var innerContent = cell.innerHTML;
         
-        // Reset writing-mode
+        // Reset writing-mode on the cell
         cell.style.writingMode = 'horizontal-tb';
         cell.style.textOrientation = 'mixed';
         cell.style.transform = '';
         
-        // Create a wrapper with rotation
+        // Create a wrapper div with rotation that contains the original content
         var wrapper = document.createElement('div');
         wrapper.style.display = 'inline-block';
         wrapper.style.whiteSpace = 'nowrap';
         wrapper.style.transformOrigin = 'center center';
+        wrapper.style.padding = '2px';
         
         if (writingMode === 'vertical-rl') {
           wrapper.style.transform = 'rotate(-90deg)';
@@ -3331,12 +3333,14 @@ async function renderHtmlToPdfPages(html, pdf, pageWidth, pageHeight, pageSize) 
           wrapper.style.transform = 'rotate(90deg)';
         }
         
-        wrapper.textContent = textContent;
+        // Put the original content inside the wrapper
+        wrapper.innerHTML = innerContent;
         cell.innerHTML = '';
         cell.appendChild(wrapper);
         cell.style.verticalAlign = 'middle';
         cell.style.textAlign = 'center';
         cell.style.minHeight = '60px';
+        cell.style.minWidth = '40px';
       }
     });
     

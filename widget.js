@@ -2497,6 +2497,9 @@ function syncBoolFormat(value) {
 
 // Resolve {{IMG:column}} or {{IMG:column:width}} in HTML for a specific record
 function resolveImagesInHtml(html, record, forPdf) {
+  // First, remove the green styling spans around {{IMG:...}}
+  html = html.replace(/<span[^>]*style="[^"]*background:#dcfce7[^"]*"[^>]*>(\{\{IMG:[^}]+\}\})<\/span>/g, '$1');
+  
   var imgRegex = /\{\{IMG:([^:}]+)(?::(\d+))?\}\}/g;
   return html.replace(imgRegex, function(match, colName, width) {
     var imgValue = record[colName];
@@ -3374,6 +3377,9 @@ function resolveTemplate(html, record, forPdf) {
   
   // Process {{#each Column=Value}}...{{/each}} loops first
   resolved = processLoops(resolved, forPdf);
+  
+  // Remove the green styling spans around {{IMG:...}} before processing
+  resolved = resolved.replace(/<span[^>]*style="[^"]*background:#dcfce7[^"]*"[^>]*>(\{\{IMG:[^}]+\}\})<\/span>/g, '$1');
   
   // Process {{IMG:column}} or {{IMG:column:width}} for images
   var imgRegex = /\{\{IMG:([^:}]+)(?::(\d+))?\}\}/g;

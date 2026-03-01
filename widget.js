@@ -2495,6 +2495,26 @@ function syncBoolFormat(value) {
   if (previewSelect) previewSelect.value = value;
 }
 
+// Resolve {{IMG:column}} or {{IMG:column:width}} in HTML for a specific record
+function resolveImagesInHtml(html, record, forPdf) {
+  var imgRegex = /\{\{IMG:([^:}]+)(?::(\d+))?\}\}/g;
+  return html.replace(imgRegex, function(match, colName, width) {
+    var imgValue = record[colName];
+    if (!imgValue) {
+      return forPdf ? '' : '<span class="var-empty">[IMG: ' + colName + ' vide]</span>';
+    }
+    
+    var imgUrl = resolveImageUrl(imgValue);
+    if (!imgUrl) {
+      return forPdf ? '' : '<span class="var-empty">[IMG: format non supporté]</span>';
+    }
+    
+    var imgWidth = width ? width + 'px' : 'auto';
+    var imgStyle = 'max-width:100%;height:auto;' + (width ? 'width:' + imgWidth + ';' : '');
+    return '<img src="' + imgUrl + '" style="' + imgStyle + '" alt="' + colName + '">';
+  });
+}
+
 // Resolve image URL from various formats
 function resolveImageUrl(value) {
   if (!value) return null;
@@ -2827,6 +2847,8 @@ function executeLoopFromView(viewId, loopContent, forPdf) {
         rowHtml = rowHtml.replace(plainRegex, '');
       }
     }
+    // Resolve images for this row
+    rowHtml = resolveImagesInHtml(rowHtml, rowRecord, forPdf);
     output += rowHtml;
   }
   
@@ -2925,6 +2947,8 @@ async function executeLoopLinkedTableAsync(linkedTableName, refColumn, loopConte
           rowHtml = rowHtml.replace(plainRegex, '');
         }
       }
+      // Resolve images for this row
+      rowHtml = resolveImagesInHtml(rowHtml, rowRecord, forPdf);
       output += rowHtml;
     }
     
@@ -3161,6 +3185,8 @@ function executeLoopAllRows(loopContent, forPdf) {
           rowHtml = rowHtml.replace(plainRegex, '');
         }
       }
+      // Resolve images for this row
+      rowHtml = resolveImagesInHtml(rowHtml, rowRecord, forPdf);
       output += rowHtml;
     }
     return output;
@@ -3214,6 +3240,8 @@ function executeLoopAllRows(loopContent, forPdf) {
         rowHtml = rowHtml.replace(plainRegex, '');
       }
     }
+    // Resolve images for this row
+    rowHtml = resolveImagesInHtml(rowHtml, rowRecord, forPdf);
     output += rowHtml;
   }
   
@@ -3333,6 +3361,8 @@ function executeLoop(filterColumn, filterValue, loopContent, forPdf) {
       }
     }
     
+    // Resolve images for this row
+    rowHtml = resolveImagesInHtml(rowHtml, rowRecord, forPdf);
     output += rowHtml;
   }
   

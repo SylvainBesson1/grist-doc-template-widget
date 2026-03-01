@@ -1555,6 +1555,14 @@ function initEditor() {
     addNewLineDeltaShow: 20,
     addNewLineTagsTriggers: ['table', 'iframe', 'img', 'hr', 'jodit'],
     controls: {
+      insertparagraph: {
+        name: 'insertparagraph',
+        iconURL: '',
+        tooltip: currentLang === 'fr' ? 'Insérer un paragraphe vide (pour espacer les tableaux)' : 'Insert empty paragraph (to space tables)',
+        exec: function(editor) {
+          editor.selection.insertHTML('<p><br></p>');
+        }
+      },
       pagebreak: {
         name: 'pagebreak',
         iconURL: '',
@@ -1627,7 +1635,7 @@ function initEditor() {
       'align', 'verticaltext', '|',
       'table', '|',
       'link', 'image', '|',
-      'hr', 'pagebreak', '|',
+      'hr', 'insertparagraph', 'pagebreak', '|',
       'undo', 'redo', '|',
       'eraser', 'source', 'fullsize', 'print'
     ],

@@ -3308,6 +3308,36 @@ async function renderHtmlToPdfPages(html, pdf, pageWidth, pageHeight, pageSize) 
       if (!cell.style.padding) {
         cell.style.padding = '4px 8px';
       }
+      
+      // Handle vertical text BEFORE rendering - html2canvas doesn't support writing-mode
+      var writingMode = cell.style.writingMode;
+      if (writingMode === 'vertical-rl' || writingMode === 'vertical-lr') {
+        var textContent = cell.textContent || cell.innerText;
+        
+        // Reset writing-mode
+        cell.style.writingMode = 'horizontal-tb';
+        cell.style.textOrientation = 'mixed';
+        cell.style.transform = '';
+        
+        // Create a wrapper with rotation
+        var wrapper = document.createElement('div');
+        wrapper.style.display = 'inline-block';
+        wrapper.style.whiteSpace = 'nowrap';
+        wrapper.style.transformOrigin = 'center center';
+        
+        if (writingMode === 'vertical-rl') {
+          wrapper.style.transform = 'rotate(-90deg)';
+        } else {
+          wrapper.style.transform = 'rotate(90deg)';
+        }
+        
+        wrapper.textContent = textContent;
+        cell.innerHTML = '';
+        cell.appendChild(wrapper);
+        cell.style.verticalAlign = 'middle';
+        cell.style.textAlign = 'center';
+        cell.style.minHeight = '60px';
+      }
     });
     
     // Pre-style images

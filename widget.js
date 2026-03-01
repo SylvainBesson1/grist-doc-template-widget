@@ -739,6 +739,10 @@ function renderVariableChips() {
 
 function insertLoopSyntax() {
   if (!editorInstance) return;
+  
+  // Restore cursor position if it was saved
+  restoreEditorSelection();
+  
   var exampleCol = tableColumns.length > 0 ? tableColumns[0] : 'Colonne';
   var placeholder = currentLang === 'fr' ? 'Contenu répété ici...' : 'Repeated content here...';
   
@@ -1008,6 +1012,9 @@ function updateEditLoopValueOptions() {
 function insertTableWithLoop() {
   if (!editorInstance) return;
   
+  // Restore cursor position if it was saved
+  restoreEditorSelection();
+  
   // Build column selector options
   var colOptions = '';
   for (var i = 0; i < tableColumns.length; i++) {
@@ -1240,8 +1247,40 @@ function insertTableWithLoop() {
   });
 }
 
+// Store last cursor position before clicking outside editor
+var lastEditorRange = null;
+
+function saveEditorSelection() {
+  if (!editorInstance) return;
+  try {
+    var sel = editorInstance.selection;
+    if (sel && sel.sel && sel.sel.rangeCount > 0) {
+      lastEditorRange = sel.sel.getRangeAt(0).cloneRange();
+    }
+  } catch (e) {
+    // Ignore errors
+  }
+}
+
+function restoreEditorSelection() {
+  if (!editorInstance || !lastEditorRange) return false;
+  try {
+    editorInstance.focus();
+    var sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(lastEditorRange);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
 function insertVariable(colName) {
   if (!editorInstance) return;
+  
+  // Restore cursor position if it was saved
+  restoreEditorSelection();
+  
   var varHtml = '<span style="background:#f3e8ff;color:#7c3aed;padding:2px 6px;border-radius:4px;font-weight:600;" contenteditable="false">{{' + colName + '}}</span>&nbsp;';
   editorInstance.selection.insertHTML(varHtml);
   showToast('{{' + colName + '}} inséré', 'info');
@@ -1598,7 +1637,17 @@ function initEditor() {
       change: function() {
         scheduleAutoSave();
       },
+      selectionchange: function() {
+        // Save cursor position whenever selection changes
+        saveEditorSelection();
+      },
+      blur: function() {
+        // Save cursor position when editor loses focus
+        saveEditorSelection();
+      },
       click: function(e) {
+        // Save cursor position on click
+        saveEditorSelection();
         // Check if clicked on a table with loop
         var target = e.target;
         var table = target.closest ? target.closest('table') : null;

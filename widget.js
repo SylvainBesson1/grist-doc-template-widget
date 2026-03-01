@@ -3312,35 +3312,46 @@ async function renderHtmlToPdfPages(html, pdf, pageWidth, pageHeight, pageSize) 
       // Handle vertical text BEFORE rendering - html2canvas doesn't support writing-mode
       var writingMode = cell.style.writingMode;
       if (writingMode === 'vertical-rl' || writingMode === 'vertical-lr') {
-        // Preserve the inner HTML content
-        var innerContent = cell.innerHTML;
+        // Get the text content to calculate dimensions
+        var textContent = cell.textContent || cell.innerText || '';
+        textContent = textContent.trim();
+        
+        // Calculate required height based on text length (approx 8px per character)
+        var textWidth = textContent.length * 8;
+        var requiredHeight = Math.max(textWidth + 20, 60); // Add padding
         
         // Reset writing-mode on the cell
         cell.style.writingMode = 'horizontal-tb';
         cell.style.textOrientation = 'mixed';
         cell.style.transform = '';
         
-        // Create a wrapper div with rotation that contains the original content
-        var wrapper = document.createElement('div');
-        wrapper.style.display = 'inline-block';
-        wrapper.style.whiteSpace = 'nowrap';
-        wrapper.style.transformOrigin = 'center center';
-        wrapper.style.padding = '2px';
-        
-        if (writingMode === 'vertical-rl') {
-          wrapper.style.transform = 'rotate(-90deg)';
-        } else {
-          wrapper.style.transform = 'rotate(90deg)';
-        }
-        
-        // Put the original content inside the wrapper
-        wrapper.innerHTML = innerContent;
-        cell.innerHTML = '';
-        cell.appendChild(wrapper);
+        // Set cell dimensions to accommodate rotated text
+        cell.style.height = requiredHeight + 'px';
+        cell.style.minHeight = requiredHeight + 'px';
+        cell.style.width = '40px';
+        cell.style.minWidth = '40px';
         cell.style.verticalAlign = 'middle';
         cell.style.textAlign = 'center';
-        cell.style.minHeight = '60px';
-        cell.style.minWidth = '40px';
+        cell.style.position = 'relative';
+        cell.style.overflow = 'visible';
+        
+        // Create a wrapper div with rotation
+        var wrapper = document.createElement('div');
+        wrapper.style.position = 'absolute';
+        wrapper.style.left = '50%';
+        wrapper.style.top = '50%';
+        wrapper.style.whiteSpace = 'nowrap';
+        wrapper.style.transformOrigin = 'center center';
+        
+        if (writingMode === 'vertical-rl') {
+          wrapper.style.transform = 'translate(-50%, -50%) rotate(-90deg)';
+        } else {
+          wrapper.style.transform = 'translate(-50%, -50%) rotate(90deg)';
+        }
+        
+        wrapper.textContent = textContent;
+        cell.innerHTML = '';
+        cell.appendChild(wrapper);
       }
     });
     

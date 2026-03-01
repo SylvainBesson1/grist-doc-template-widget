@@ -659,6 +659,7 @@
     <div class="header">
       <h1>📄 <span data-i18n="title">Document Template</span></h1>
       <div class="header-actions">
+        <button class="lang-btn" onclick="openHelpGuide()" title="Guide d'utilisation" style="background:rgba(255,255,255,0.25);">❓</button>
         <button class="lang-btn active" onclick="setLang('fr')">FR</button>
         <button class="lang-btn" onclick="setLang('en')">EN</button>
       </div>
@@ -869,6 +870,19 @@
 
   <!-- TOAST -->
   <div id="toast-container"></div>
+
+  <!-- HELP GUIDE MODAL -->
+  <div class="modal-overlay hidden" id="help-guide-overlay" onclick="closeHelpGuide(event)">
+    <div class="modal" style="max-width:800px;max-height:85vh;overflow-y:auto;" onclick="event.stopPropagation()">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;">
+        <h3 style="margin:0;font-size:16px;">📖 <span data-i18n="helpTitle">Guide d'utilisation</span></h3>
+        <button onclick="closeHelpGuide()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#64748b;">&times;</button>
+      </div>
+      <div id="help-guide-content" style="font-size:13px;line-height:1.6;">
+        <!-- Content will be injected by JS based on language -->
+      </div>
+    </div>
+  </div>
 
   <!-- MODAL -->
   <div class="modal-overlay hidden" id="modal-overlay">

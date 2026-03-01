@@ -4267,3 +4267,231 @@ function splitHtmlIntoPageSections(html) {
 
   return sections;
 }
+
+// =============================================================================
+// HELP GUIDE
+// =============================================================================
+
+function openHelpGuide() {
+  var overlay = document.getElementById('help-guide-overlay');
+  var content = document.getElementById('help-guide-content');
+  
+  if (currentLang === 'fr') {
+    content.innerHTML = getHelpGuideFR();
+  } else {
+    content.innerHTML = getHelpGuideEN();
+  }
+  
+  overlay.classList.remove('hidden');
+}
+
+function closeHelpGuide(event) {
+  if (event && event.target !== document.getElementById('help-guide-overlay')) return;
+  document.getElementById('help-guide-overlay').classList.add('hidden');
+}
+
+function getHelpGuideFR() {
+  return `
+    <style>
+      .help-section { margin-bottom: 20px; }
+      .help-section h4 { color: #7c3aed; margin-bottom: 8px; font-size: 14px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }
+      .help-table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 12px; }
+      .help-table th { background: #f1f5f9; text-align: left; padding: 8px; border: 1px solid #e2e8f0; }
+      .help-table td { padding: 8px; border: 1px solid #e2e8f0; }
+      .help-table code { background: #fef3c7; padding: 2px 6px; border-radius: 3px; font-family: monospace; }
+      .help-tip { background: #f0fdf4; border: 1px solid #86efac; border-radius: 6px; padding: 10px; margin: 10px 0; font-size: 12px; }
+      .help-tip strong { color: #166534; }
+    </style>
+    
+    <div class="help-section">
+      <h4>🚀 Démarrage rapide</h4>
+      <ol style="margin-left: 20px;">
+        <li>Sélectionnez une <strong>table source</strong> dans le menu déroulant</li>
+        <li>Créez votre document dans l'<strong>éditeur</strong> (ou importez un fichier Word)</li>
+        <li>Cliquez sur les <strong>variables</strong> pour les insérer dans le document</li>
+        <li>Allez dans <strong>Prévisualisation</strong> pour voir le résultat avec les vraies données</li>
+        <li>Allez dans <strong>Générer PDF</strong> pour exporter</li>
+      </ol>
+    </div>
+    
+    <div class="help-section">
+      <h4>📝 Variables simples</h4>
+      <table class="help-table">
+        <tr><th>Syntaxe</th><th>Description</th><th>Exemple</th></tr>
+        <tr><td><code>{{NomColonne}}</code></td><td>Affiche la valeur de la colonne</td><td><code>{{Nom}}</code> → "Martin"</td></tr>
+        <tr><td><code>{{Date}}</code></td><td>Les dates sont formatées automatiquement</td><td><code>{{DateCommande}}</code> → "15/02/2026"</td></tr>
+        <tr><td><code>{{Booleen}}</code></td><td>Affiché selon le format choisi (Oui/Non ou ☑/☐)</td><td><code>{{Actif}}</code> → "Oui"</td></tr>
+      </table>
+    </div>
+    
+    <div class="help-section">
+      <h4>🖼️ Images dynamiques</h4>
+      <table class="help-table">
+        <tr><th>Syntaxe</th><th>Description</th></tr>
+        <tr><td><code>{{IMG:NomColonne}}</code></td><td>Affiche une image depuis l'URL stockée dans la colonne</td></tr>
+        <tr><td><code>{{IMG:NomColonne:150}}</code></td><td>Affiche l'image avec une largeur de 150 pixels</td></tr>
+      </table>
+      <div class="help-tip">
+        <strong>💡 Formats supportés :</strong> URLs web (https://...), Attachments Grist, chemins relatifs avec URL de base (configurée dans les options PDF)
+      </div>
+    </div>
+    
+    <div class="help-section">
+      <h4>🔄 Boucles (répéter des données)</h4>
+      <table class="help-table">
+        <tr><th>Syntaxe</th><th>Description</th></tr>
+        <tr><td><code>{{#each}}...{{/each}}</code></td><td>Boucle sur toutes les lignes de la table</td></tr>
+        <tr><td><code>{{#each Colonne=Valeur}}...{{/each}}</code></td><td>Boucle filtrée (ex: <code>{{#each Statut=Actif}}</code>)</td></tr>
+        <tr><td><code>{{#each @Table.ColonneRef}}...{{/each}}</code></td><td>Boucle sur une table liée (ex: <code>{{#each @Commandes.Client}}</code>)</td></tr>
+      </table>
+      <div class="help-tip">
+        <strong>💡 Exemple de tableau avec boucle :</strong><br>
+        Créez un tableau, mettez <code>{{#each}}</code> dans la première cellule de la ligne de données, 
+        les variables <code>{{Colonne}}</code> dans les autres cellules, et <code>{{/each}}</code> dans la dernière cellule.
+      </div>
+    </div>
+    
+    <div class="help-section">
+      <h4>📊 Boutons de tableau</h4>
+      <table class="help-table">
+        <tr><th>Bouton</th><th>Fonction</th></tr>
+        <tr><td><strong>table</strong></td><td>Créer un tableau standard</td></tr>
+        <tr><td><strong>tablelayout</strong></td><td>Mise en page (2 colonnes, 3 colonnes, sidebar) pour disposer du contenu côte à côte</td></tr>
+        <tr><td><strong>nestedtable</strong></td><td>Insérer un tableau à l'intérieur d'une cellule</td></tr>
+        <tr><td><strong>tableborder</strong></td><td>Personnaliser les bordures de tout le tableau (couleur, épaisseur, visibilité)</td></tr>
+        <tr><td><strong>cellborder</strong></td><td>Personnaliser les bordures d'une cellule (couleur, épaisseur, côtés)</td></tr>
+        <tr><td><strong>columnwidth</strong></td><td>Définir une largeur fixe pour une colonne (en px ou %)</td></tr>
+      </table>
+    </div>
+    
+    <div class="help-section">
+      <h4>🎨 Boutons de formatage</h4>
+      <table class="help-table">
+        <tr><th>Bouton</th><th>Fonction</th></tr>
+        <tr><td><strong>verticaltext</strong></td><td>Orienter le texte verticalement dans une cellule</td></tr>
+        <tr><td><strong>pagebreak</strong></td><td>Insérer un saut de page pour le PDF</td></tr>
+        <tr><td><strong>insertparagraph</strong></td><td>Ajouter un paragraphe après un tableau (utile quand le curseur est bloqué)</td></tr>
+      </table>
+    </div>
+    
+    <div class="help-section">
+      <h4>📄 Génération PDF</h4>
+      <table class="help-table">
+        <tr><th>Option</th><th>Description</th></tr>
+        <tr><td><strong>Format</strong></td><td>A4 ou Letter</td></tr>
+        <tr><td><strong>Mode</strong></td><td>Un seul PDF avec tous les enregistrements, ou l'enregistrement actuel uniquement</td></tr>
+        <tr><td><strong>Nom du fichier</strong></td><td>Vous pouvez utiliser des variables : <code>Facture_{{Nom}}.pdf</code></td></tr>
+        <tr><td><strong>URL base images</strong></td><td>Pour les chemins relatifs (ex: photo.jpg → URL/photo.jpg)</td></tr>
+      </table>
+    </div>
+    
+    <div class="help-section">
+      <h4>💾 Sauvegarde</h4>
+      <p>Le modèle est automatiquement sauvegardé dans le stockage local du navigateur, par table. 
+      Vous pouvez aussi utiliser le bouton "Sauvegarder le modèle" pour forcer la sauvegarde.</p>
+    </div>
+  `;
+}
+
+function getHelpGuideEN() {
+  return `
+    <style>
+      .help-section { margin-bottom: 20px; }
+      .help-section h4 { color: #7c3aed; margin-bottom: 8px; font-size: 14px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }
+      .help-table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 12px; }
+      .help-table th { background: #f1f5f9; text-align: left; padding: 8px; border: 1px solid #e2e8f0; }
+      .help-table td { padding: 8px; border: 1px solid #e2e8f0; }
+      .help-table code { background: #fef3c7; padding: 2px 6px; border-radius: 3px; font-family: monospace; }
+      .help-tip { background: #f0fdf4; border: 1px solid #86efac; border-radius: 6px; padding: 10px; margin: 10px 0; font-size: 12px; }
+      .help-tip strong { color: #166534; }
+    </style>
+    
+    <div class="help-section">
+      <h4>🚀 Quick Start</h4>
+      <ol style="margin-left: 20px;">
+        <li>Select a <strong>source table</strong> from the dropdown</li>
+        <li>Create your document in the <strong>editor</strong> (or import a Word file)</li>
+        <li>Click on <strong>variables</strong> to insert them into the document</li>
+        <li>Go to <strong>Preview</strong> to see the result with real data</li>
+        <li>Go to <strong>Generate PDF</strong> to export</li>
+      </ol>
+    </div>
+    
+    <div class="help-section">
+      <h4>📝 Simple Variables</h4>
+      <table class="help-table">
+        <tr><th>Syntax</th><th>Description</th><th>Example</th></tr>
+        <tr><td><code>{{ColumnName}}</code></td><td>Display the column value</td><td><code>{{Name}}</code> → "Martin"</td></tr>
+        <tr><td><code>{{Date}}</code></td><td>Dates are automatically formatted</td><td><code>{{OrderDate}}</code> → "02/15/2026"</td></tr>
+        <tr><td><code>{{Boolean}}</code></td><td>Displayed according to chosen format (Yes/No or ☑/☐)</td><td><code>{{Active}}</code> → "Yes"</td></tr>
+      </table>
+    </div>
+    
+    <div class="help-section">
+      <h4>🖼️ Dynamic Images</h4>
+      <table class="help-table">
+        <tr><th>Syntax</th><th>Description</th></tr>
+        <tr><td><code>{{IMG:ColumnName}}</code></td><td>Display an image from the URL stored in the column</td></tr>
+        <tr><td><code>{{IMG:ColumnName:150}}</code></td><td>Display the image with a width of 150 pixels</td></tr>
+      </table>
+      <div class="help-tip">
+        <strong>💡 Supported formats:</strong> Web URLs (https://...), Grist Attachments, relative paths with base URL (configured in PDF options)
+      </div>
+    </div>
+    
+    <div class="help-section">
+      <h4>🔄 Loops (repeat data)</h4>
+      <table class="help-table">
+        <tr><th>Syntax</th><th>Description</th></tr>
+        <tr><td><code>{{#each}}...{{/each}}</code></td><td>Loop over all rows in the table</td></tr>
+        <tr><td><code>{{#each Column=Value}}...{{/each}}</code></td><td>Filtered loop (e.g., <code>{{#each Status=Active}}</code>)</td></tr>
+        <tr><td><code>{{#each @Table.RefColumn}}...{{/each}}</code></td><td>Loop on a linked table (e.g., <code>{{#each @Orders.Customer}}</code>)</td></tr>
+      </table>
+      <div class="help-tip">
+        <strong>💡 Table with loop example:</strong><br>
+        Create a table, put <code>{{#each}}</code> in the first cell of the data row, 
+        variables <code>{{Column}}</code> in other cells, and <code>{{/each}}</code> in the last cell.
+      </div>
+    </div>
+    
+    <div class="help-section">
+      <h4>📊 Table Buttons</h4>
+      <table class="help-table">
+        <tr><th>Button</th><th>Function</th></tr>
+        <tr><td><strong>table</strong></td><td>Create a standard table</td></tr>
+        <tr><td><strong>tablelayout</strong></td><td>Layout (2 columns, 3 columns, sidebar) to arrange content side by side</td></tr>
+        <tr><td><strong>nestedtable</strong></td><td>Insert a table inside a cell</td></tr>
+        <tr><td><strong>tableborder</strong></td><td>Customize borders for the entire table (color, thickness, visibility)</td></tr>
+        <tr><td><strong>cellborder</strong></td><td>Customize borders for a cell (color, thickness, sides)</td></tr>
+        <tr><td><strong>columnwidth</strong></td><td>Set a fixed width for a column (in px or %)</td></tr>
+      </table>
+    </div>
+    
+    <div class="help-section">
+      <h4>🎨 Formatting Buttons</h4>
+      <table class="help-table">
+        <tr><th>Button</th><th>Function</th></tr>
+        <tr><td><strong>verticaltext</strong></td><td>Orient text vertically in a cell</td></tr>
+        <tr><td><strong>pagebreak</strong></td><td>Insert a page break for PDF</td></tr>
+        <tr><td><strong>insertparagraph</strong></td><td>Add a paragraph after a table (useful when cursor is stuck)</td></tr>
+      </table>
+    </div>
+    
+    <div class="help-section">
+      <h4>📄 PDF Generation</h4>
+      <table class="help-table">
+        <tr><th>Option</th><th>Description</th></tr>
+        <tr><td><strong>Format</strong></td><td>A4 or Letter</td></tr>
+        <tr><td><strong>Mode</strong></td><td>Single PDF with all records, or current record only</td></tr>
+        <tr><td><strong>Filename</strong></td><td>You can use variables: <code>Invoice_{{Name}}.pdf</code></td></tr>
+        <tr><td><strong>Image base URL</strong></td><td>For relative paths (e.g., photo.jpg → URL/photo.jpg)</td></tr>
+      </table>
+    </div>
+    
+    <div class="help-section">
+      <h4>💾 Saving</h4>
+      <p>The template is automatically saved in the browser's local storage, per table. 
+      You can also use the "Save template" button to force save.</p>
+    </div>
+  `;
+}

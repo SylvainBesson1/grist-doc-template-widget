@@ -1599,6 +1599,106 @@ function initEditor() {
           );
         }
       },
+      tableborder: {
+        name: 'tableborder',
+        iconURL: '',
+        tooltip: currentLang === 'fr' ? 'Bordures du tableau (couleur/invisible)' : 'Table borders (color/invisible)',
+        exec: function(editor) {
+          var selection = editor.selection;
+          var current = selection.current();
+          var table = null;
+          if (current) {
+            table = current.closest ? current.closest('table') : null;
+            if (!table) {
+              var el = current;
+              while (el && el.tagName !== 'TABLE') {
+                el = el.parentElement;
+              }
+              table = el;
+            }
+          }
+          
+          if (!table) {
+            alert(currentLang === 'fr' ? 'Placez le curseur dans un tableau' : 'Place cursor in a table');
+            return;
+          }
+          
+          // Show border options dialog
+          var currentBorder = table.style.border || '1px solid #000';
+          var isInvisible = currentBorder.includes('transparent') || currentBorder === 'none' || currentBorder === '';
+          
+          var dialog = document.createElement('div');
+          dialog.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:white;padding:20px;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.3);z-index:10000;min-width:280px;';
+          dialog.innerHTML = `
+            <h3 style="margin:0 0 15px 0;font-size:1.1em;">${currentLang === 'fr' ? 'Bordures du tableau' : 'Table Borders'}</h3>
+            <div style="margin-bottom:12px;">
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                <input type="checkbox" id="border-invisible" ${isInvisible ? 'checked' : ''}>
+                ${currentLang === 'fr' ? 'Bordures invisibles' : 'Invisible borders'}
+              </label>
+            </div>
+            <div id="border-color-group" style="${isInvisible ? 'opacity:0.5;pointer-events:none;' : ''}">
+              <div style="margin-bottom:8px;font-weight:500;">${currentLang === 'fr' ? 'Couleur des bordures' : 'Border color'}</div>
+              <input type="color" id="border-color" value="#000000" style="width:100%;height:36px;border:1px solid #e2e8f0;border-radius:4px;cursor:pointer;">
+              <div style="margin-top:8px;font-weight:500;">${currentLang === 'fr' ? 'Épaisseur' : 'Thickness'}</div>
+              <select id="border-width" style="width:100%;padding:8px;border:1px solid #e2e8f0;border-radius:4px;">
+                <option value="1px">1px</option>
+                <option value="2px">2px</option>
+                <option value="3px">3px</option>
+              </select>
+            </div>
+            <div style="display:flex;gap:10px;margin-top:15px;">
+              <button id="border-apply" style="flex:1;padding:10px;background:#3b82f6;color:white;border:none;border-radius:6px;cursor:pointer;">${currentLang === 'fr' ? 'Appliquer' : 'Apply'}</button>
+              <button id="border-cancel" style="flex:1;padding:10px;background:#f1f5f9;border:none;border-radius:6px;cursor:pointer;">${currentLang === 'fr' ? 'Annuler' : 'Cancel'}</button>
+            </div>
+          `;
+          
+          var overlay = document.createElement('div');
+          overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.3);z-index:9999;';
+          
+          document.body.appendChild(overlay);
+          document.body.appendChild(dialog);
+          
+          var invisibleCheck = dialog.querySelector('#border-invisible');
+          var colorGroup = dialog.querySelector('#border-color-group');
+          
+          invisibleCheck.addEventListener('change', function() {
+            colorGroup.style.opacity = this.checked ? '0.5' : '1';
+            colorGroup.style.pointerEvents = this.checked ? 'none' : 'auto';
+          });
+          
+          dialog.querySelector('#border-apply').addEventListener('click', function() {
+            var invisible = invisibleCheck.checked;
+            var color = dialog.querySelector('#border-color').value;
+            var width = dialog.querySelector('#border-width').value;
+            
+            var borderStyle = invisible ? 'none' : width + ' solid ' + color;
+            
+            // Apply to table
+            table.style.border = borderStyle;
+            table.style.borderCollapse = 'collapse';
+            
+            // Apply to all cells
+            var cells = table.querySelectorAll('td, th');
+            cells.forEach(function(cell) {
+              cell.style.border = borderStyle;
+            });
+            
+            document.body.removeChild(dialog);
+            document.body.removeChild(overlay);
+          });
+          
+          dialog.querySelector('#border-cancel').addEventListener('click', function() {
+            document.body.removeChild(dialog);
+            document.body.removeChild(overlay);
+          });
+          
+          overlay.addEventListener('click', function() {
+            document.body.removeChild(dialog);
+            document.body.removeChild(overlay);
+          });
+        }
+      },
       verticaltext: {
         name: 'verticaltext',
         iconURL: '',
@@ -1657,7 +1757,7 @@ function initEditor() {
       'ul', 'ol', '|',
       'outdent', 'indent', '|',
       'align', 'verticaltext', '|',
-      'table', '|',
+      'table', 'tableborder', '|',
       'link', 'image', '|',
       'hr', 'insertparagraph', 'pagebreak', '|',
       'undo', 'redo', '|',

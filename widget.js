@@ -728,6 +728,11 @@ function renderVariableChips() {
   html += '📊 ' + t('tableLoopBtn');
   html += '</span>';
   
+  // Add image insertion helper chip
+  html += '<span class="var-chip" style="background:#dcfce7;color:#166534;border:1px solid #86efac;" onclick="insertImageVariable()" title="' + (currentLang === 'fr' ? 'Insérer une image depuis une colonne' : 'Insert image from column') + '">';
+  html += '🖼️ ' + (currentLang === 'fr' ? 'Image' : 'Image');
+  html += '</span>';
+  
   for (var i = 0; i < tableColumns.length; i++) {
     var col = tableColumns[i];
     html += '<span class="var-chip" onclick="insertVariable(\'' + sanitize(col) + '\')">';
@@ -735,6 +740,72 @@ function renderVariableChips() {
     html += '</span>';
   }
   document.getElementById('var-chips').innerHTML = html;
+}
+
+// Insert image variable with column selection dialog
+function insertImageVariable() {
+  if (!editorInstance) return;
+  
+  restoreEditorSelection();
+  
+  // Build column options
+  var colOptions = tableColumns.map(function(col) {
+    return '<option value="' + col + '">' + col + '</option>';
+  }).join('');
+  
+  var dialog = document.createElement('div');
+  dialog.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:white;padding:20px;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.3);z-index:10000;min-width:300px;';
+  dialog.innerHTML = '\
+    <h3 style="margin:0 0 15px 0;font-size:1.1em;">' + (currentLang === 'fr' ? 'Insérer une image' : 'Insert Image') + '</h3>\
+    <div style="margin-bottom:12px;">\
+      <label style="display:block;margin-bottom:4px;font-weight:500;">' + (currentLang === 'fr' ? 'Colonne contenant l\'image' : 'Column containing image') + '</label>\
+      <select id="img-column" style="width:100%;padding:8px;border:1px solid #e2e8f0;border-radius:4px;">\
+        ' + colOptions + '\
+      </select>\
+    </div>\
+    <div style="margin-bottom:12px;">\
+      <label style="display:block;margin-bottom:4px;font-weight:500;">' + (currentLang === 'fr' ? 'Largeur (optionnel)' : 'Width (optional)') + '</label>\
+      <input type="number" id="img-width" placeholder="200" style="width:100%;padding:8px;border:1px solid #e2e8f0;border-radius:4px;">\
+      <small style="color:#64748b;font-size:11px;">' + (currentLang === 'fr' ? 'En pixels. Vide = taille originale' : 'In pixels. Empty = original size') + '</small>\
+    </div>\
+    <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:4px;padding:10px;margin-bottom:12px;font-size:12px;">\
+      <strong>' + (currentLang === 'fr' ? 'Formats supportés :' : 'Supported formats:') + '</strong><br>\
+      • URL web (https://...)<br>\
+      • Attachments Grist<br>\
+      • Chemin + URL base (config PDF)\
+    </div>\
+    <div style="display:flex;gap:10px;">\
+      <button id="img-insert" style="flex:1;padding:10px;background:#22c55e;color:white;border:none;border-radius:6px;cursor:pointer;">' + (currentLang === 'fr' ? 'Insérer' : 'Insert') + '</button>\
+      <button id="img-cancel" style="flex:1;padding:10px;background:#f1f5f9;border:none;border-radius:6px;cursor:pointer;">' + (currentLang === 'fr' ? 'Annuler' : 'Cancel') + '</button>\
+    </div>\
+  ';
+  
+  var overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.3);z-index:9999;';
+  
+  document.body.appendChild(overlay);
+  document.body.appendChild(dialog);
+  
+  dialog.querySelector('#img-insert').addEventListener('click', function() {
+    var col = dialog.querySelector('#img-column').value;
+    var width = dialog.querySelector('#img-width').value;
+    
+    var syntax = '{{IMG:' + col + (width ? ':' + width : '') + '}}';
+    editorInstance.selection.insertHTML('<span style="background:#dcfce7;color:#166534;padding:2px 6px;border-radius:4px;">' + syntax + '</span>');
+    
+    document.body.removeChild(dialog);
+    document.body.removeChild(overlay);
+  });
+  
+  dialog.querySelector('#img-cancel').addEventListener('click', function() {
+    document.body.removeChild(dialog);
+    document.body.removeChild(overlay);
+  });
+  
+  overlay.addEventListener('click', function() {
+    document.body.removeChild(dialog);
+    document.body.removeChild(overlay);
+  });
 }
 
 function insertLoopSyntax() {
@@ -2310,6 +2381,54 @@ function syncBoolFormat(value) {
   if (previewSelect) previewSelect.value = value;
 }
 
+// Resolve image URL from various formats
+function resolveImageUrl(value) {
+  if (!value) return null;
+  
+  var str = String(value).trim();
+  
+  // 1. Already a web URL (http:// or https://)
+  if (str.startsWith('http://') || str.startsWith('https://')) {
+    return str;
+  }
+  
+  // 2. Grist Attachment format - array of attachment objects [{id: 123, ...}]
+  if (Array.isArray(value) && value.length > 0 && value[0].id) {
+    // Build Grist attachment URL
+    var attachmentId = value[0].id;
+    if (gristServerUrl && gristDocId) {
+      return gristServerUrl + '/api/docs/' + gristDocId + '/attachments/' + attachmentId + '/download';
+    }
+    return null;
+  }
+  
+  // 3. Grist Attachment ID (just a number)
+  if (/^\d+$/.test(str)) {
+    if (gristServerUrl && gristDocId) {
+      return gristServerUrl + '/api/docs/' + gristDocId + '/attachments/' + str + '/download';
+    }
+    return null;
+  }
+  
+  // 4. Data URL (base64 encoded image)
+  if (str.startsWith('data:image/')) {
+    return str;
+  }
+  
+  // 5. Relative path with configured base URL
+  var imageBaseUrl = document.getElementById('image-base-url')?.value;
+  if (imageBaseUrl) {
+    // Remove trailing slash from base URL
+    imageBaseUrl = imageBaseUrl.replace(/\/+$/, '');
+    // Remove leading slash from path
+    var path = str.replace(/^\/+/, '');
+    return imageBaseUrl + '/' + path;
+  }
+  
+  // 6. Try as-is (might be a relative URL that works)
+  return str;
+}
+
 function formatValueForDisplay(value) {
   if (value === null || value === undefined || value === '') return '';
   
@@ -3111,6 +3230,24 @@ function resolveTemplate(html, record, forPdf) {
   
   // Process {{#each Column=Value}}...{{/each}} loops first
   resolved = processLoops(resolved, forPdf);
+  
+  // Process {{IMG:column}} or {{IMG:column:width}} for images
+  var imgRegex = /\{\{IMG:([^:}]+)(?::(\d+))?\}\}/g;
+  resolved = resolved.replace(imgRegex, function(match, colName, width) {
+    var imgValue = record[colName];
+    if (!imgValue) {
+      return forPdf ? '' : '<span class="var-empty">[IMG: ' + colName + ' vide]</span>';
+    }
+    
+    var imgUrl = resolveImageUrl(imgValue);
+    if (!imgUrl) {
+      return forPdf ? '' : '<span class="var-empty">[IMG: format non supporté]</span>';
+    }
+    
+    var imgWidth = width ? width + 'px' : 'auto';
+    var imgStyle = 'max-width:100%;height:auto;' + (width ? 'width:' + imgWidth + ';' : '');
+    return '<img src="' + imgUrl + '" style="' + imgStyle + '" alt="' + colName + '">';
+  });
   
   for (var col in record) {
     var val = record[col];

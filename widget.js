@@ -1670,6 +1670,107 @@ function initEditor() {
           );
         }
       },
+      columnwidth: {
+        name: 'columnwidth',
+        iconURL: '',
+        tooltip: currentLang === 'fr' ? 'Largeur de la colonne' : 'Column width',
+        exec: function(editor) {
+          var selection = editor.selection;
+          var current = selection.current();
+          var cell = null;
+          if (current) {
+            cell = current.closest ? current.closest('td, th') : null;
+            if (!cell) {
+              var el = current;
+              while (el && el.tagName !== 'TD' && el.tagName !== 'TH') {
+                el = el.parentElement;
+              }
+              cell = el;
+            }
+          }
+          
+          if (!cell) {
+            alert(currentLang === 'fr' ? 'Placez le curseur dans une cellule' : 'Place cursor in a cell');
+            return;
+          }
+          
+          var table = cell.closest('table');
+          if (!table) return;
+          
+          // Get column index
+          var colIndex = Array.from(cell.parentElement.children).indexOf(cell);
+          
+          // Get current width
+          var currentWidth = cell.style.width || 'auto';
+          var widthValue = parseInt(currentWidth) || 100;
+          var widthUnit = currentWidth.includes('%') ? '%' : 'px';
+          
+          var dialog = document.createElement('div');
+          dialog.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:white;padding:20px;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.3);z-index:10000;min-width:280px;';
+          dialog.innerHTML = '\
+            <h3 style="margin:0 0 15px 0;font-size:1.1em;">' + (currentLang === 'fr' ? 'Largeur de la colonne' : 'Column Width') + '</h3>\
+            <div style="margin-bottom:12px;">\
+              <label style="display:block;margin-bottom:4px;font-weight:500;">' + (currentLang === 'fr' ? 'Largeur' : 'Width') + '</label>\
+              <div style="display:flex;gap:8px;">\
+                <input type="number" id="col-width-value" value="' + widthValue + '" min="20" max="1000" style="flex:1;padding:8px;border:1px solid #e2e8f0;border-radius:4px;">\
+                <select id="col-width-unit" style="padding:8px;border:1px solid #e2e8f0;border-radius:4px;">\
+                  <option value="px" ' + (widthUnit === 'px' ? 'selected' : '') + '>px</option>\
+                  <option value="%" ' + (widthUnit === '%' ? 'selected' : '') + '>%</option>\
+                </select>\
+              </div>\
+            </div>\
+            <div style="margin-bottom:12px;">\
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">\
+                <input type="checkbox" id="col-width-all">\
+                ' + (currentLang === 'fr' ? 'Appliquer à toute la colonne' : 'Apply to entire column') + '\
+              </label>\
+            </div>\
+            <div style="display:flex;gap:10px;margin-top:15px;">\
+              <button id="col-width-apply" style="flex:1;padding:10px;background:#3b82f6;color:white;border:none;border-radius:6px;cursor:pointer;">' + (currentLang === 'fr' ? 'Appliquer' : 'Apply') + '</button>\
+              <button id="col-width-cancel" style="flex:1;padding:10px;background:#f1f5f9;border:none;border-radius:6px;cursor:pointer;">' + (currentLang === 'fr' ? 'Annuler' : 'Cancel') + '</button>\
+            </div>\
+          ';
+          
+          var overlay = document.createElement('div');
+          overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.3);z-index:9999;';
+          
+          document.body.appendChild(overlay);
+          document.body.appendChild(dialog);
+          
+          dialog.querySelector('#col-width-apply').addEventListener('click', function() {
+            var value = dialog.querySelector('#col-width-value').value;
+            var unit = dialog.querySelector('#col-width-unit').value;
+            var applyAll = dialog.querySelector('#col-width-all').checked;
+            var widthStyle = value + unit;
+            
+            if (applyAll) {
+              // Apply to all cells in this column
+              var rows = table.querySelectorAll('tr');
+              rows.forEach(function(row) {
+                var cells = row.querySelectorAll('td, th');
+                if (cells[colIndex]) {
+                  cells[colIndex].style.width = widthStyle;
+                }
+              });
+            } else {
+              cell.style.width = widthStyle;
+            }
+            
+            document.body.removeChild(dialog);
+            document.body.removeChild(overlay);
+          });
+          
+          dialog.querySelector('#col-width-cancel').addEventListener('click', function() {
+            document.body.removeChild(dialog);
+            document.body.removeChild(overlay);
+          });
+          
+          overlay.addEventListener('click', function() {
+            document.body.removeChild(dialog);
+            document.body.removeChild(overlay);
+          });
+        }
+      },
       cellborder: {
         name: 'cellborder',
         iconURL: '',
@@ -1942,7 +2043,7 @@ function initEditor() {
       'ul', 'ol', '|',
       'outdent', 'indent', '|',
       'align', 'verticaltext', '|',
-      'table', 'tableborder', 'cellborder', '|',
+      'table', 'tableborder', 'cellborder', 'columnwidth', '|',
       'link', 'image', '|',
       'hr', 'insertparagraph', 'pagebreak', '|',
       'undo', 'redo', '|',

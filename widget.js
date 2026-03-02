@@ -4632,19 +4632,20 @@ function positionRulers() {
   rulerH.style.top = (wpTop - rulerH_height) + 'px';
   rulerH.style.width = wpWidth + 'px';
   
-  // Place vertical ruler to the left of .jodit-workplace
+  // A4: 210mm x 297mm - use same scale for both axes
+  var pxPerCm = wpWidth / 21.0;
+  var a4HeightPx = Math.round(pxPerCm * 29.7); // exact A4 height based on scale
+  
+  // Place vertical ruler to the left of .jodit-workplace (limited to A4 height)
   rulerV.style.left = (wpLeft - rulerV_width) + 'px';
   rulerV.style.top = wpTop + 'px';
-  rulerV.style.height = wpHeight + 'px';
+  rulerV.style.height = a4HeightPx + 'px';
   
   // Place corner
   rulerCorner.style.left = (wpLeft - rulerV_width) + 'px';
   rulerCorner.style.top = (wpTop - rulerH_height) + 'px';
   
-  // Generate marks
-  // A4: 210mm wide, workplace width = the page width
-  var pxPerCm = wpWidth / 21.0;
-  
+  // Horizontal ruler marks (0 to 21 cm)
   var hHtml = '';
   for (var i = 0; i <= 21; i++) {
     var pos = i * pxPerCm;
@@ -4653,10 +4654,9 @@ function positionRulers() {
   }
   rulerHMarks.innerHTML = hHtml;
   
-  // Vertical: same pxPerCm (1cm = 1cm on both axes)
-  var vCmCount = Math.ceil(wpHeight / pxPerCm);
+  // Vertical ruler marks (0 to 29.7 cm = 30 marks)
   var vHtml = '';
-  for (var i = 0; i <= vCmCount; i++) {
+  for (var i = 0; i <= 30; i++) {
     var pos = i * pxPerCm;
     var cls = (i % 10 === 0) ? 'cm10' : (i % 5 === 0) ? 'cm5' : '';
     vHtml += '<div class="ruler-mark ' + cls + '" style="top: ' + pos + 'px;">' + i + '</div>';
@@ -4733,10 +4733,14 @@ function positionPreviewRulers() {
   rulerH.style.width = pageWidth + 'px';
   rulerH.style.background = '#f8fafc';
   
-  // Place vertical ruler to the left of the preview page
+  // A4: 210mm x 297mm - use same scale for both axes
+  var pxPerCm = pageWidth / 21.0;
+  var a4HeightPx = Math.round(pxPerCm * 29.7); // exact A4 height based on scale
+  
+  // Place vertical ruler to the left of the preview page (limited to A4 height)
   rulerV.style.left = (pageLeft - rulerV_width) + 'px';
   rulerV.style.top = pageTop + 'px';
-  rulerV.style.height = pageHeight + 'px';
+  rulerV.style.height = a4HeightPx + 'px';
   rulerV.style.background = '#f8fafc';
   
   // Place corner
@@ -4744,9 +4748,7 @@ function positionPreviewRulers() {
   rulerCorner.style.top = (pageTop - rulerH_height) + 'px';
   rulerCorner.style.background = '#e2e8f0';
   
-  // Generate marks: use same pxPerCm for both axes (1cm is 1cm)
-  var pxPerCm = pageWidth / 21.0;
-  
+  // Horizontal ruler marks (0 to 21 cm)
   var hHtml = '';
   for (var i = 0; i <= 21; i++) {
     var pos = i * pxPerCm;
@@ -4755,10 +4757,9 @@ function positionPreviewRulers() {
   }
   rulerHMarks.innerHTML = hHtml;
   
-  // Vertical: same pxPerCm, extend as many cm as the page height allows
-  var vCmCount = Math.ceil(pageHeight / pxPerCm);
+  // Vertical ruler marks (0 to 30 cm, A4 = 29.7cm)
   var vHtml = '';
-  for (var i = 0; i <= vCmCount; i++) {
+  for (var i = 0; i <= 30; i++) {
     var pos = i * pxPerCm;
     var cls = (i % 10 === 0) ? 'cm10' : (i % 5 === 0) ? 'cm5' : '';
     vHtml += '<div class="ruler-mark ' + cls + '" style="top: ' + pos + 'px;">' + i + '</div>';

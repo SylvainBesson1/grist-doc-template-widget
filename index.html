@@ -458,9 +458,10 @@
     }
     .preview-pages-wrapper.preview-format-a4 .preview-page {
       width: 794px; /* 210mm at 96dpi */
-      min-height: 1123px; /* 297mm at 96dpi */
+      height: 1123px; /* 297mm at 96dpi */
+      max-height: 1123px;
       box-sizing: border-box;
-      overflow: visible;
+      overflow: hidden;
       position: relative;
     }
     .preview-pages-wrapper.preview-format-letter {
@@ -469,9 +470,10 @@
     }
     .preview-pages-wrapper.preview-format-letter .preview-page {
       width: 816px; /* 8.5in at 96dpi */
-      min-height: 1056px; /* 11in at 96dpi */
+      height: 1056px; /* 11in at 96dpi */
+      max-height: 1056px;
       box-sizing: border-box;
-      overflow: visible;
+      overflow: hidden;
       position: relative;
     }
     .preview-page + .preview-page {

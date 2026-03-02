@@ -3838,8 +3838,13 @@ function renderPreview() {
   }
 
   if (!templateHtml || !selectedTable || count === 0) {
-    wrapper.innerHTML = '<div class="preview-page"><p style="color:#94a3b8; text-align:center; padding:40px;">' + t('previewEmpty') + '</p></div>';
+    removePreviewPages(wrapper);
+    var emptyPage = document.createElement('div');
+    emptyPage.className = 'preview-page';
+    emptyPage.innerHTML = '<p style="color:#94a3b8; text-align:center; padding:40px;">' + t('previewEmpty') + '</p>';
+    wrapper.appendChild(emptyPage);
     document.getElementById('record-current').textContent = '0';
+    if (showPreviewRulers) setTimeout(positionPreviewRulers, 50);
     return;
   }
 
@@ -3867,7 +3872,20 @@ function renderPreview() {
       (currentLang === 'fr' ? 'Page ' : 'Page ') + pages.length + ' / ' + pages.length +
       '</div>';
   }
-  wrapper.innerHTML = html;
+  removePreviewPages(wrapper);
+  var temp = document.createElement('div');
+  temp.innerHTML = html;
+  while (temp.firstChild) {
+    wrapper.appendChild(temp.firstChild);
+  }
+  if (showPreviewRulers) setTimeout(positionPreviewRulers, 50);
+}
+
+function removePreviewPages(wrapper) {
+  var pages = wrapper.querySelectorAll('.preview-page, .preview-page-number');
+  for (var i = 0; i < pages.length; i++) {
+    pages[i].remove();
+  }
 }
 
 function splitPreviewIntoPages(html) {

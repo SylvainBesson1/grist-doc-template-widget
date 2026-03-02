@@ -4563,6 +4563,78 @@ function initStickyToolbar() {
 }
 
 // =============================================================================
+// RULERS
+// =============================================================================
+
+var showRulers = false;
+
+function toggleRulers() {
+  showRulers = !showRulers;
+  var btn = document.getElementById('ruler-toggle-btn');
+  var rulerH = document.getElementById('ruler-h');
+  var rulerV = document.getElementById('ruler-v');
+  var rulerCorner = document.getElementById('ruler-corner');
+  var wrapper = document.getElementById('editor-page-wrapper');
+  
+  btn.classList.toggle('active', showRulers);
+  rulerH.classList.toggle('show', showRulers);
+  rulerV.classList.toggle('show', showRulers);
+  rulerCorner.classList.toggle('show', showRulers);
+  wrapper.classList.toggle('editor-page-wrapper-with-rulers', showRulers);
+  
+  if (showRulers) {
+    setTimeout(generateRulerMarks, 50);
+  }
+}
+
+function generateRulerMarks() {
+  var rulerHMarks = document.getElementById('ruler-h-marks');
+  var rulerVMarks = document.getElementById('ruler-v-marks');
+  var wrapper = document.getElementById('editor-page-wrapper');
+  var editorWrapper = wrapper.querySelector('.editor-wrapper');
+  
+  if (!editorWrapper) return;
+  
+  // Get dimensions
+  var wrapperRect = wrapper.getBoundingClientRect();
+  var editorRect = editorWrapper.getBoundingClientRect();
+  
+  // Calculate offset for ruler marks to align with editor
+  var offsetX = editorRect.left - wrapperRect.left - 30; // 30 = ruler-v width
+  var offsetY = editorRect.top - wrapperRect.top - 20; // 20 = ruler-h height
+  
+  // 1cm = 37.8px at 96dpi
+  var cmToPx = 37.8;
+  
+  // Horizontal ruler (21cm for A4 width)
+  var hHtml = '';
+  for (var i = 0; i <= 21; i++) {
+    var pos = offsetX + (i * cmToPx);
+    if (pos >= 0) {
+      hHtml += '<div class="ruler-mark" style="left: ' + pos + 'px;">' + i + '</div>';
+    }
+  }
+  rulerHMarks.innerHTML = hHtml;
+  
+  // Vertical ruler (30cm to cover A4 height of 29.7cm)
+  var vHtml = '';
+  for (var i = 0; i <= 30; i++) {
+    var pos = offsetY + (i * cmToPx);
+    if (pos >= 0) {
+      vHtml += '<div class="ruler-mark" style="top: ' + pos + 'px;">' + i + '</div>';
+    }
+  }
+  rulerVMarks.innerHTML = vHtml;
+}
+
+// Update rulers on scroll and resize
+window.addEventListener('resize', function() {
+  if (showRulers) {
+    generateRulerMarks();
+  }
+});
+
+// =============================================================================
 // TEMPLATE PANEL TOGGLE
 // =============================================================================
 

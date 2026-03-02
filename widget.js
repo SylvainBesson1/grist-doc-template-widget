@@ -4004,7 +4004,15 @@ async function renderHtmlToPdfPages(html, pdf, pageWidth, pageHeight, pageSize) 
     });
     var cells = tempDiv.querySelectorAll('td, th');
     cells.forEach(function(cell) {
-      if (!cell.style.border || cell.style.border === 'none') {
+      // Check if cell has ANY border style (individual or shorthand)
+      var hasBorder = cell.style.border || 
+                      cell.style.borderTop || 
+                      cell.style.borderBottom || 
+                      cell.style.borderLeft || 
+                      cell.style.borderRight;
+      
+      // Only apply default border if no border is set at all
+      if (!hasBorder) {
         cell.style.border = '1px solid #000';
       }
       if (!cell.style.padding) {

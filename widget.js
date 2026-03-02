@@ -4653,10 +4653,11 @@ function positionRulers() {
   }
   rulerHMarks.innerHTML = hHtml;
   
-  var vPxPerCm = wpHeight / 29.7;
+  // Vertical: same pxPerCm (1cm = 1cm on both axes)
+  var vCmCount = Math.ceil(wpHeight / pxPerCm);
   var vHtml = '';
-  for (var i = 0; i <= 30; i++) {
-    var pos = i * vPxPerCm;
+  for (var i = 0; i <= vCmCount; i++) {
+    var pos = i * pxPerCm;
     var cls = (i % 10 === 0) ? 'cm10' : (i % 5 === 0) ? 'cm5' : '';
     vHtml += '<div class="ruler-mark ' + cls + '" style="top: ' + pos + 'px;">' + i + '</div>';
   }
@@ -4743,7 +4744,7 @@ function positionPreviewRulers() {
   rulerCorner.style.top = (pageTop - rulerH_height) + 'px';
   rulerCorner.style.background = '#e2e8f0';
   
-  // Generate marks: scale to fit the page
+  // Generate marks: use same pxPerCm for both axes (1cm is 1cm)
   var pxPerCm = pageWidth / 21.0;
   
   var hHtml = '';
@@ -4754,10 +4755,11 @@ function positionPreviewRulers() {
   }
   rulerHMarks.innerHTML = hHtml;
   
-  var vPxPerCm = pageHeight / 29.7;
+  // Vertical: same pxPerCm, extend as many cm as the page height allows
+  var vCmCount = Math.ceil(pageHeight / pxPerCm);
   var vHtml = '';
-  for (var i = 0; i <= 30; i++) {
-    var pos = i * vPxPerCm;
+  for (var i = 0; i <= vCmCount; i++) {
+    var pos = i * pxPerCm;
     var cls = (i % 10 === 0) ? 'cm10' : (i % 5 === 0) ? 'cm5' : '';
     vHtml += '<div class="ruler-mark ' + cls + '" style="top: ' + pos + 'px;">' + i + '</div>';
   }

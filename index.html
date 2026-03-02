@@ -374,7 +374,8 @@
     .ruler-v .ruler-mark { position: absolute; left: 0; width: 100%; border-top: 1px solid #cbd5e1; font-size: 8px; color: #475569; writing-mode: vertical-rl; text-orientation: mixed; padding-top: 2px; }
     .ruler-v .ruler-mark.cm5 { border-top: 1px solid #94a3b8; }
     .ruler-v .ruler-mark.cm10 { border-top: 2px solid #64748b; font-weight: 600; }
-    #ruler-toggle-btn.active { background: #3b82f6 !important; color: white !important; border-color: #3b82f6 !important; }
+    #ruler-toggle-btn.active, #preview-ruler-toggle-btn.active { background: #3b82f6 !important; color: white !important; border-color: #3b82f6 !important; }
+    .preview-ruler { display: none; }
 
     /* ========== PAGE FORMAT VISUAL ========== */
     #editor-page-wrapper {
@@ -850,10 +851,17 @@
           <button class="btn btn-primary btn-sm" onclick="generateSinglePdf()">
             📄 <span data-i18n="pdfSingle">PDF de cet enregistrement</span>
           </button>
+          <div class="toolbar-sep"></div>
+          <button class="btn btn-secondary btn-sm" id="preview-ruler-toggle-btn" onclick="togglePreviewRulers()" title="Règle">
+            📐 <span data-i18n="rulerBtn">Règle</span>
+          </button>
         </div>
 
         <!-- PREVIEW PAGE -->
-        <div class="preview-pages-wrapper preview-format-a4" id="preview-pages-wrapper">
+        <div class="preview-pages-wrapper preview-format-a4" id="preview-pages-wrapper" style="position:relative;">
+          <div class="ruler-corner preview-ruler" id="preview-ruler-corner">cm</div>
+          <div class="ruler-h preview-ruler" id="preview-ruler-h"><div class="ruler-marks" id="preview-ruler-h-marks"></div></div>
+          <div class="ruler-v preview-ruler" id="preview-ruler-v"><div class="ruler-marks" id="preview-ruler-v-marks"></div></div>
           <div class="preview-page" id="preview-page">
             <p style="color: #94a3b8; text-align: center; padding: 40px;" data-i18n="previewEmpty">
               Sélectionnez une table et créez un modèle pour voir la prévisualisation.

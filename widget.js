@@ -4648,7 +4648,89 @@ function positionRulers() {
 // Update rulers on resize and scroll
 window.addEventListener('resize', function() {
   if (showRulers) positionRulers();
+  if (showPreviewRulers) positionPreviewRulers();
 });
+
+// =============================================================================
+// PREVIEW RULERS
+// =============================================================================
+
+var showPreviewRulers = false;
+
+function togglePreviewRulers() {
+  showPreviewRulers = !showPreviewRulers;
+  var btn = document.getElementById('preview-ruler-toggle-btn');
+  var rulerH = document.getElementById('preview-ruler-h');
+  var rulerV = document.getElementById('preview-ruler-v');
+  var rulerCorner = document.getElementById('preview-ruler-corner');
+  
+  if (btn) btn.classList.toggle('active', showPreviewRulers);
+  if (rulerH) rulerH.style.display = showPreviewRulers ? 'block' : 'none';
+  if (rulerV) rulerV.style.display = showPreviewRulers ? 'block' : 'none';
+  if (rulerCorner) rulerCorner.style.display = showPreviewRulers ? 'block' : 'none';
+  
+  if (showPreviewRulers) {
+    positionPreviewRulers();
+  }
+}
+
+function positionPreviewRulers() {
+  var rulerH = document.getElementById('preview-ruler-h');
+  var rulerV = document.getElementById('preview-ruler-v');
+  var rulerCorner = document.getElementById('preview-ruler-corner');
+  var rulerHMarks = document.getElementById('preview-ruler-h-marks');
+  var rulerVMarks = document.getElementById('preview-ruler-v-marks');
+  var previewPage = document.querySelector('#preview-pages-wrapper .preview-page');
+  var wrapper = document.getElementById('preview-pages-wrapper');
+  
+  if (!rulerH || !rulerV || !rulerCorner || !previewPage || !wrapper) return;
+  
+  // Get preview-page position relative to wrapper
+  var pageRect = previewPage.getBoundingClientRect();
+  var wrapperRect = wrapper.getBoundingClientRect();
+  
+  var pageLeft = pageRect.left - wrapperRect.left;
+  var pageTop = pageRect.top - wrapperRect.top;
+  var pageWidth = previewPage.offsetWidth;
+  var pageHeight = previewPage.offsetHeight;
+  
+  var rulerH_height = 20;
+  var rulerV_width = 25;
+  
+  // Place horizontal ruler just above the preview page
+  rulerH.style.left = pageLeft + 'px';
+  rulerH.style.top = (pageTop - rulerH_height) + 'px';
+  rulerH.style.width = pageWidth + 'px';
+  
+  // Place vertical ruler to the left of the preview page
+  rulerV.style.left = (pageLeft - rulerV_width) + 'px';
+  rulerV.style.top = pageTop + 'px';
+  rulerV.style.height = pageHeight + 'px';
+  
+  // Place corner
+  rulerCorner.style.left = (pageLeft - rulerV_width) + 'px';
+  rulerCorner.style.top = (pageTop - rulerH_height) + 'px';
+  
+  // Generate marks: scale to fit the page
+  var pxPerCm = pageWidth / 21.0;
+  
+  var hHtml = '';
+  for (var i = 0; i <= 21; i++) {
+    var pos = i * pxPerCm;
+    var cls = (i % 10 === 0) ? 'cm10' : (i % 5 === 0) ? 'cm5' : '';
+    hHtml += '<div class="ruler-mark ' + cls + '" style="left: ' + pos + 'px;">' + i + '</div>';
+  }
+  rulerHMarks.innerHTML = hHtml;
+  
+  var vPxPerCm = pageHeight / 29.7;
+  var vHtml = '';
+  for (var i = 0; i <= 30; i++) {
+    var pos = i * vPxPerCm;
+    var cls = (i % 10 === 0) ? 'cm10' : (i % 5 === 0) ? 'cm5' : '';
+    vHtml += '<div class="ruler-mark ' + cls + '" style="top: ' + pos + 'px;">' + i + '</div>';
+  }
+  rulerVMarks.innerHTML = vHtml;
+}
 
 // =============================================================================
 // TEMPLATE PANEL TOGGLE

@@ -4608,28 +4608,30 @@ function generateRulerMarks() {
   var pageWidth = 794;
   var pageHeight = joditWysiwyg.offsetHeight || 1123;
   
-  // Position corner just above the page (not the content)
-  // The page starts at offsetLeft - 60px (padding) and offsetTop - 40px (padding)
-  var pageLeft = offsetLeft - 60; // Remove left padding
-  var pageTop = offsetTop - 40;   // Remove top padding
+  // The jodit-wysiwyg has padding: 40px 60px, so the page edge is at:
+  // Left edge of page = left edge of content - 60px padding
+  // Top edge of page = top edge of content - 40px padding
+  // But we want rulers OUTSIDE the page, so position them relative to content
   
+  // Position rulers at the top-left of the CONTENT area (where text starts)
+  // This way 0cm = where the text margin starts
   if (rulerCorner) {
-    rulerCorner.style.left = (pageLeft - rulerWidth) + 'px';
-    rulerCorner.style.top = (pageTop - rulerHeight) + 'px';
+    rulerCorner.style.left = (offsetLeft - rulerWidth) + 'px';
+    rulerCorner.style.top = (offsetTop - rulerHeight) + 'px';
   }
   
-  // Position horizontal ruler just above the page
+  // Position horizontal ruler at top of content
   if (rulerH) {
-    rulerH.style.left = pageLeft + 'px';
-    rulerH.style.top = (pageTop - rulerHeight) + 'px';
-    rulerH.style.width = pageWidth + 'px';
+    rulerH.style.left = offsetLeft + 'px';
+    rulerH.style.top = (offsetTop - rulerHeight) + 'px';
+    rulerH.style.width = (pageWidth - 120) + 'px'; // 794 - 2*60px padding
   }
   
-  // Position vertical ruler at the left of the page
+  // Position vertical ruler at left of content
   if (rulerV) {
-    rulerV.style.left = (pageLeft - rulerWidth) + 'px';
-    rulerV.style.top = pageTop + 'px';
-    rulerV.style.height = pageHeight + 'px';
+    rulerV.style.left = (offsetLeft - rulerWidth) + 'px';
+    rulerV.style.top = offsetTop + 'px';
+    rulerV.style.height = (pageHeight - 80) + 'px'; // height - 2*40px padding
   }
   
   // 1cm = 37.8px at 96dpi

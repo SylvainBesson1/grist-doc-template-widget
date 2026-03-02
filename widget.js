@@ -4405,8 +4405,6 @@ function initStickyToolbar() {
     var toolbar = document.querySelector('.jodit-toolbar__box');
     if (!toolbar) return;
     
-    // Get the variables bar - toolbar should stick below it
-    var varsBar = document.querySelector('.variables-bar');
     var toolbarHeight = toolbar.offsetHeight;
     
     // Create placeholder to prevent content jump
@@ -4415,8 +4413,8 @@ function initStickyToolbar() {
     placeholder.style.height = toolbarHeight + 'px';
     toolbar.parentNode.insertBefore(placeholder, toolbar);
     
-    // Store initial toolbar position
-    var initialToolbarTop = toolbar.getBoundingClientRect().top + window.scrollY;
+    // Store initial toolbar offset from document top
+    var initialToolbarOffsetTop = placeholder.offsetTop;
     
     function handleScroll() {
       var editorTab = document.querySelector('[data-tab="editor"]');
@@ -4428,18 +4426,16 @@ function initStickyToolbar() {
         return;
       }
       
-      // Get the bottom of the variables bar (where toolbar should stick)
-      var varsBarRect = varsBar ? varsBar.getBoundingClientRect() : null;
-      var fixedTop = varsBarRect ? varsBarRect.bottom : 85;
+      // Get tabs element to know where to fix toolbar
+      var tabs = document.querySelector('.tabs');
+      var tabsBottom = tabs ? tabs.getBoundingClientRect().bottom : 40;
       
-      // Check if toolbar would go above the variables bar
-      var toolbarCurrentTop = placeholder.classList.contains('active') 
-        ? placeholder.getBoundingClientRect().top 
-        : toolbar.getBoundingClientRect().top;
+      // Check if placeholder top has scrolled above tabs bottom
+      var placeholderTop = placeholder.getBoundingClientRect().top;
       
-      if (toolbarCurrentTop <= fixedTop) {
+      if (placeholderTop <= tabsBottom) {
         toolbar.classList.add('toolbar-fixed');
-        toolbar.style.top = fixedTop + 'px';
+        toolbar.style.top = tabsBottom + 'px';
         placeholder.classList.add('active');
       } else {
         toolbar.classList.remove('toolbar-fixed');

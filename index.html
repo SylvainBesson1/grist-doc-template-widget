@@ -266,9 +266,16 @@
       border-radius: 6px !important;
       box-shadow: 0 1px 4px rgba(0,0,0,0.06) !important;
       margin-bottom: 12px !important;
+      position: sticky !important;
+      top: 125px !important;
+      z-index: 50 !important;
     }
     .jodit-workplace {
       min-height: 400px !important;
+    }
+    /* Ensure parent containers don't break sticky */
+    .editor-wrapper, .jodit-container, #editor-page-wrapper, .main {
+      overflow: visible !important;
     }
     .jodit-wysiwyg { font-family: 'Times New Roman', Times, serif; font-size: 14px; line-height: 1.6; }
     .jodit-wysiwyg table { border-collapse: collapse; }

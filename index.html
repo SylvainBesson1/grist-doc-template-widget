@@ -255,16 +255,22 @@
       border-radius: 0;
       overflow: visible;
     }
+    /* Sticky toolbar - detached from editor */
     .jodit-container { 
       border: none !important;
       background: transparent !important;
     }
     .jodit-toolbar__box {
+      position: sticky !important;
+      top: 82px !important;
+      z-index: 50 !important;
       background: white !important;
-      border: 1px solid #e2e8f0 !important;
-      border-radius: 6px !important;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.06) !important;
-      position: static !important;
+      border: none !important;
+      border-bottom: 2px solid #e2e8f0 !important;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1) !important;
+      margin: 0 -16px 16px -16px !important;
+      padding: 8px 16px !important;
+      border-radius: 0 !important;
     }
     .jodit-workplace {
       min-height: 400px !important;

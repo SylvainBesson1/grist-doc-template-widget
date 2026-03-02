@@ -3865,6 +3865,12 @@ function renderPreview() {
     var subPages = autoPageBreak(explicitPages[ep], wrapper);
     pages = pages.concat(subPages);
   }
+  // Remove blank pages
+  pages = pages.filter(function(p) {
+    var tmp = document.createElement('div');
+    tmp.innerHTML = p;
+    return tmp.textContent.trim().length > 0 || tmp.querySelector('img, table');
+  });
   
   var html = '';
   for (var p = 0; p < pages.length; p++) {
@@ -4214,28 +4220,36 @@ async function renderHtmlToPdfPages(html, pdf, pageWidth, pageHeight, pageSize) 
   var imgWidth = pageWidth - (margin * 2);
   var availableHeight = pageHeight - (margin * 2);
   var pixelWidth = (pageSize === 'a4' ? 794 : 816);
-  var baseCss = 'position:absolute;left:-9999px;top:0;width:' + pixelWidth + 'px;padding:0 60px;font-family:"Times New Roman",Times,serif;font-size:14px;line-height:1.6;background:white;';
+  var baseCss = 'position:absolute;left:-9999px;top:0;width:' + pixelWidth + 'px;padding:40px 60px;font-family:"Times New Roman",Times,serif;font-size:14px;line-height:1.6;background:white;';
 
-  // Split HTML into blocks at page-break markers and top-level elements
-  var sections = splitHtmlIntoPageSections(html);
-  var currentY = margin;
-  var isFirstOnPage = true;
+  // Use the same auto-pagination as preview
+  var explicitPages = splitOnPageBreaks(html);
+  
+  // Create a temporary wrapper to pass to autoPageBreak
+  var fakeWrapper = document.createElement('div');
+  fakeWrapper.classList.add(pageSize === 'letter' ? 'preview-format-letter' : 'preview-format-a4');
+  
+  var pages = [];
+  for (var ep = 0; ep < explicitPages.length; ep++) {
+    var subPages = autoPageBreak(explicitPages[ep], fakeWrapper);
+    pages = pages.concat(subPages);
+  }
+  // Remove blank pages
+  pages = pages.filter(function(p) {
+    var tmp = document.createElement('div');
+    tmp.innerHTML = p;
+    return tmp.textContent.trim().length > 0 || tmp.querySelector('img, table');
+  });
 
-  for (var s = 0; s < sections.length; s++) {
-    var section = sections[s];
-
-    // Handle explicit page break
-    if (section.isPageBreak) {
+  for (var s = 0; s < pages.length; s++) {
+    if (s > 0) {
       pdf.addPage();
-      currentY = margin;
-      isFirstOnPage = true;
-      continue;
     }
 
-    // Render this block to canvas
+    // Render this page to canvas
     var tempDiv = document.createElement('div');
     tempDiv.style.cssText = baseCss;
-    tempDiv.innerHTML = section.html;
+    tempDiv.innerHTML = pages[s];
     
     // Pre-style tables and cells before appending to DOM
     var tables = tempDiv.querySelectorAll('table');
@@ -4463,23 +4477,9 @@ async function renderHtmlToPdfPages(html, pdf, pageWidth, pageHeight, pageSize) 
     var blockImgHeight = (canvas.height * imgWidth) / canvas.width;
     var imgData = canvas.toDataURL('image/jpeg', 0.95);
 
-    // If block fits on current page - render at full size
-    if (currentY + blockImgHeight <= pageHeight - margin) {
-      pdf.addImage(imgData, 'JPEG', margin, currentY, imgWidth, blockImgHeight);
-      currentY += blockImgHeight;
-      isFirstOnPage = false;
-    }
-    // Block doesn't fit on current page - go to next page
-    else {
-      if (!isFirstOnPage) {
-        pdf.addPage();
-        currentY = margin;
-      }
-      // Render at full width, let it overflow if needed (will be cropped by PDF)
-      pdf.addImage(imgData, 'JPEG', margin, currentY, imgWidth, blockImgHeight);
-      currentY += blockImgHeight;
-      isFirstOnPage = false;
-    }
+    // Each page is pre-paginated to fit within A4/Letter height
+    // Just render it at the top of the current PDF page
+    pdf.addImage(imgData, 'JPEG', margin, margin, imgWidth, Math.min(blockImgHeight, availableHeight));
   }
 }
 

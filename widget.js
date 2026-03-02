@@ -274,15 +274,6 @@ if (!isInsideGrist()) {
       // Initialize editor FIRST so it's ready when we load templates
       initEditor();
       
-      // Move Jodit toolbar to separate container (outside the page)
-      setTimeout(function() {
-        var toolbar = document.querySelector('.jodit-toolbar__box');
-        var toolbarContainer = document.getElementById('jodit-toolbar-container');
-        if (toolbar && toolbarContainer) {
-          toolbarContainer.appendChild(toolbar);
-          console.log('Jodit toolbar moved to separate container');
-        }
-      }, 200);
       
       // Show fixed bars for editor tab (default tab)
       var fixedVarBar = document.getElementById('fixed-var-bar');
@@ -1625,7 +1616,6 @@ function initEditor() {
     placeholder: currentLang === 'fr' ? 'Commencez à écrire votre document ici...' : 'Start writing your document here...',
     allowResizeY: true,
     toolbarAdaptive: false,
-    // toolbar will be moved to #jodit-toolbar-container after init
     askBeforePasteHTML: false,
     askBeforePasteFromWord: false,
     defaultActionOnPaste: 'insert_clear_html',
@@ -4582,28 +4572,61 @@ var showRulers = false;
 function toggleRulers() {
   showRulers = !showRulers;
   var btn = document.getElementById('ruler-toggle-btn');
-  var wrapper = document.getElementById('editor-page-wrapper');
+  var rulerH = document.getElementById('ruler-h');
+  var rulerV = document.getElementById('ruler-v');
+  var rulerCorner = document.getElementById('ruler-corner');
   
   if (btn) btn.classList.toggle('active', showRulers);
-  if (wrapper) wrapper.classList.toggle('editor-page-with-rulers', showRulers);
+  if (rulerH) rulerH.classList.toggle('show', showRulers);
+  if (rulerV) rulerV.classList.toggle('show', showRulers);
+  if (rulerCorner) rulerCorner.classList.toggle('show', showRulers);
   
   if (showRulers) {
-    generateRulerMarks();
+    positionRulers();
   }
 }
 
-function generateRulerMarks() {
+function positionRulers() {
+  var rulerH = document.getElementById('ruler-h');
+  var rulerV = document.getElementById('ruler-v');
+  var rulerCorner = document.getElementById('ruler-corner');
   var rulerHMarks = document.getElementById('ruler-h-marks');
   var rulerVMarks = document.getElementById('ruler-v-marks');
+  var workplace = document.querySelector('.jodit-workplace');
+  var editorWrapper = document.querySelector('.editor-wrapper');
   
-  if (!rulerHMarks || !rulerVMarks) return;
+  if (!rulerH || !rulerV || !rulerCorner || !workplace || !editorWrapper) return;
   
-  // A4 = 210mm x 297mm
-  // Grid column 2 is fixed at 794px = 21cm
-  var pageWidthPx = 794;
-  var pxPerCm = pageWidthPx / 21.0; // 37.81px per cm
+  // Get workplace position relative to editor-wrapper (the positioned ancestor)
+  var wpRect = workplace.getBoundingClientRect();
+  var ewRect = editorWrapper.getBoundingClientRect();
   
-  // Horizontal ruler marks (0 to 21 cm)
+  var wpLeft = wpRect.left - ewRect.left;
+  var wpTop = wpRect.top - ewRect.top;
+  var wpWidth = workplace.offsetWidth;
+  var wpHeight = workplace.offsetHeight;
+  
+  var rulerH_height = 20;
+  var rulerV_width = 25;
+  
+  // Place horizontal ruler just above .jodit-workplace
+  rulerH.style.left = wpLeft + 'px';
+  rulerH.style.top = (wpTop - rulerH_height) + 'px';
+  rulerH.style.width = wpWidth + 'px';
+  
+  // Place vertical ruler to the left of .jodit-workplace
+  rulerV.style.left = (wpLeft - rulerV_width) + 'px';
+  rulerV.style.top = wpTop + 'px';
+  rulerV.style.height = wpHeight + 'px';
+  
+  // Place corner
+  rulerCorner.style.left = (wpLeft - rulerV_width) + 'px';
+  rulerCorner.style.top = (wpTop - rulerH_height) + 'px';
+  
+  // Generate marks
+  // A4: 210mm wide, workplace width = the page width
+  var pxPerCm = wpWidth / 21.0;
+  
   var hHtml = '';
   for (var i = 0; i <= 21; i++) {
     var pos = i * pxPerCm;
@@ -4612,10 +4635,7 @@ function generateRulerMarks() {
   }
   rulerHMarks.innerHTML = hHtml;
   
-  // Vertical ruler: A4 height = 1123px = 29.7cm
-  var pageHeightPx = 1123;
-  var vPxPerCm = pageHeightPx / 29.7; // 37.81px per cm
-  
+  var vPxPerCm = wpHeight / 29.7;
   var vHtml = '';
   for (var i = 0; i <= 30; i++) {
     var pos = i * vPxPerCm;
@@ -4625,11 +4645,9 @@ function generateRulerMarks() {
   rulerVMarks.innerHTML = vHtml;
 }
 
-// Update rulers on resize
+// Update rulers on resize and scroll
 window.addEventListener('resize', function() {
-  if (showRulers) {
-    generateRulerMarks();
-  }
+  if (showRulers) positionRulers();
 });
 
 // =============================================================================

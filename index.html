@@ -143,9 +143,43 @@
       z-index: 98;
       background: #f8fafc;
       display: none; /* Hidden by default, shown via JS for editor tab */
-      padding: 10px 12px;
+      padding: 0;
       border-top: 1px solid #e2e8f0;
       box-shadow: 0 -2px 8px rgba(0,0,0,0.08);
+    }
+    .template-toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      color: #475569;
+      background: linear-gradient(to bottom, #f8fafc, #f1f5f9);
+      border-bottom: 1px solid #e2e8f0;
+      user-select: none;
+      transition: background 0.2s;
+    }
+    .template-toggle:hover {
+      background: linear-gradient(to bottom, #f1f5f9, #e2e8f0);
+    }
+    .toggle-icon {
+      transition: transform 0.3s ease;
+      font-size: 10px;
+    }
+    .toggle-icon.collapsed {
+      transform: rotate(-90deg);
+    }
+    .template-manager {
+      padding: 10px 14px;
+      transition: max-height 0.3s ease, padding 0.3s ease, opacity 0.2s ease;
+      overflow: hidden;
+    }
+    .template-manager.collapsed {
+      max-height: 0 !important;
+      padding: 0 14px !important;
+      opacity: 0;
     }
 
     /* ========== MAIN CONTENT ========== */
@@ -738,7 +772,11 @@
 
     <!-- FIXED BOTTOM: TEMPLATE MANAGEMENT -->
     <div class="fixed-bottom-bar">
-      <div class="template-manager" style="background:white;border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;">
+      <div class="template-toggle" onclick="toggleTemplatePanel()">
+        <span class="toggle-icon" id="template-toggle-icon">▼</span>
+        <span data-i18n="templateToggle">Modèles</span>
+      </div>
+      <div class="template-manager" id="template-manager-panel" style="background:white;border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap;">
           <label style="font-size:12px;font-weight:600;color:#475569;white-space:nowrap;" data-i18n="templateSelect">Modèles enregistrés :</label>
           <select id="template-list" onchange="onTemplateSelectChange()" style="flex:1;min-width:140px;padding:4px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:12px;">

@@ -4449,6 +4449,27 @@ function initStickyToolbar() {
   }, 500);
 }
 
+// =============================================================================
+// TEMPLATE PANEL TOGGLE
+// =============================================================================
+
+function toggleTemplatePanel() {
+  var panel = document.getElementById('template-manager-panel');
+  var icon = document.getElementById('template-toggle-icon');
+  
+  if (panel.classList.contains('collapsed')) {
+    panel.classList.remove('collapsed');
+    icon.classList.remove('collapsed');
+    // Adjust padding-bottom of editor
+    document.querySelector('#tab-editor .main').style.paddingBottom = '130px';
+  } else {
+    panel.classList.add('collapsed');
+    icon.classList.add('collapsed');
+    // Reduce padding-bottom when collapsed
+    document.querySelector('#tab-editor .main').style.paddingBottom = '60px';
+  }
+}
+
 function getHelpGuideEN() {
   return `
     <style>

@@ -4608,31 +4608,23 @@ function generateRulerMarks() {
   var pageWidth = 794;
   var pageHeight = joditWorkplace.offsetHeight || 1123;
   
-  // Add margin to page to align with ruler
-  var gapFromToolbar = 10;
-  var joditWysiwyg = document.querySelector('.jodit-wysiwyg');
-  if (joditWysiwyg) {
-    joditWysiwyg.style.marginTop = (rulerHeight + gapFromToolbar) + 'px';
-  }
-  
-  // Position corner at the edge of the page (after margin)
-  var adjustedOffsetTop = offsetTop + rulerHeight + gapFromToolbar;
+  // Position corner just above the page
   if (rulerCorner) {
     rulerCorner.style.left = (offsetLeft - rulerWidth) + 'px';
-    rulerCorner.style.top = (adjustedOffsetTop - rulerHeight) + 'px';
+    rulerCorner.style.top = (offsetTop - rulerHeight) + 'px';
   }
   
-  // Position horizontal ruler (full page width)
+  // Position horizontal ruler just above the page
   if (rulerH) {
     rulerH.style.left = offsetLeft + 'px';
-    rulerH.style.top = (adjustedOffsetTop - rulerHeight) + 'px';
+    rulerH.style.top = (offsetTop - rulerHeight) + 'px';
     rulerH.style.width = pageWidth + 'px';
   }
   
-  // Position vertical ruler (full page height)
+  // Position vertical ruler at the left of the page
   if (rulerV) {
     rulerV.style.left = (offsetLeft - rulerWidth) + 'px';
-    rulerV.style.top = adjustedOffsetTop + 'px';
+    rulerV.style.top = offsetTop + 'px';
     rulerV.style.height = pageHeight + 'px';
   }
   

@@ -4599,8 +4599,9 @@ function generateRulerMarks() {
   var cmToPx = 37.8;
   
   // Get the padding of jodit-wysiwyg (40px top, 60px left for A4)
+  // Horizontal ruler starts at top of jodit content
   var paddingLeft = 60;
-  var paddingTop = 40;
+  var paddingTop = 20; // Adjusted for ruler-h height
   
   // Horizontal ruler (21cm for A4 width = 210mm)
   // Start from the content area (after padding)

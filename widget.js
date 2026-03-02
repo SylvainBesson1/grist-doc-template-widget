@@ -4405,15 +4405,9 @@ function initStickyToolbar() {
     var toolbar = document.querySelector('.jodit-toolbar__box');
     if (!toolbar) return;
     
-    // Get header elements to calculate fixed position
-    var header = document.querySelector('.header');
-    var tabs = document.querySelector('.tabs');
+    // Get the variables bar - toolbar should stick below it
+    var varsBar = document.querySelector('.variables-bar');
     var toolbarHeight = toolbar.offsetHeight;
-    
-    // Calculate the fixed top position (header + tabs height)
-    var fixedTop = 0;
-    if (header) fixedTop += header.offsetHeight;
-    if (tabs) fixedTop += tabs.offsetHeight;
     
     // Create placeholder to prevent content jump
     var placeholder = document.createElement('div');
@@ -4434,11 +4428,16 @@ function initStickyToolbar() {
         return;
       }
       
-      // Check if we've scrolled past the toolbar's original position
-      var scrollY = window.scrollY;
-      var triggerPoint = initialToolbarTop - fixedTop;
+      // Get the bottom of the variables bar (where toolbar should stick)
+      var varsBarRect = varsBar ? varsBar.getBoundingClientRect() : null;
+      var fixedTop = varsBarRect ? varsBarRect.bottom : 85;
       
-      if (scrollY > triggerPoint) {
+      // Check if toolbar would go above the variables bar
+      var toolbarCurrentTop = placeholder.classList.contains('active') 
+        ? placeholder.getBoundingClientRect().top 
+        : toolbar.getBoundingClientRect().top;
+      
+      if (toolbarCurrentTop <= fixedTop) {
         toolbar.classList.add('toolbar-fixed');
         toolbar.style.top = fixedTop + 'px';
         placeholder.classList.add('active');

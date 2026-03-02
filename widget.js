@@ -241,17 +241,12 @@ function switchTab(tabId) {
   
   // Show/hide fixed bars based on tab
   var fixedVarBar = document.getElementById('fixed-var-bar');
-  var fixedToolbarBar = document.getElementById('fixed-toolbar-bar');
   var fixedBottomBar = document.querySelector('.fixed-bottom-bar');
   if (tabId === 'editor') {
     if (fixedVarBar) fixedVarBar.style.display = 'block';
-    if (fixedToolbarBar) fixedToolbarBar.style.display = 'block';
     if (fixedBottomBar) fixedBottomBar.style.display = 'block';
-    // Update toolbar position after showing
-    setTimeout(updateFixedToolbarPosition, 50);
   } else {
     if (fixedVarBar) fixedVarBar.style.display = 'none';
-    if (fixedToolbarBar) fixedToolbarBar.style.display = 'none';
     if (fixedBottomBar) fixedBottomBar.style.display = 'none';
   }
   
@@ -2286,8 +2281,8 @@ function initEditor() {
     }
   });
   
-  // Move toolbar to fixed bar
-  setTimeout(moveToolbarToFixedBar, 100);
+  // Sticky toolbar disabled - causes issues with variables bar
+  // setTimeout(initStickyToolbar, 100);
 }
 
 // =============================================================================
@@ -4401,38 +4396,57 @@ function getHelpGuideFR() {
 }
 
 // =============================================================================
-// FIXED TOOLBAR
+// STICKY TOOLBAR
 // =============================================================================
 
-function moveToolbarToFixedBar() {
-  var toolbar = document.querySelector('.jodit-toolbar__box');
-  var fixedBar = document.getElementById('fixed-toolbar-bar');
-  
-  if (!toolbar || !fixedBar) {
-    // Retry after a short delay
-    setTimeout(moveToolbarToFixedBar, 200);
-    return;
-  }
-  
-  // Move the toolbar to the fixed bar
-  fixedBar.appendChild(toolbar);
-  
-  // Update the fixed bar top position based on variables bar height
-  updateFixedToolbarPosition();
-}
-
-function updateFixedToolbarPosition() {
-  var varsBar = document.getElementById('fixed-var-bar');
-  var toolbarBar = document.getElementById('fixed-toolbar-bar');
-  
-  if (!varsBar || !toolbarBar) return;
-  
-  // Get the bottom of the variables bar
-  var varsBarRect = varsBar.getBoundingClientRect();
-  var varsBarBottom = varsBarRect.bottom;
-  
-  // Position toolbar bar just below variables bar
-  toolbarBar.style.top = varsBarBottom + 'px';
+function initStickyToolbar() {
+  // Wait for Jodit to be initialized
+  setTimeout(function() {
+    var toolbar = document.querySelector('.jodit-toolbar__box');
+    if (!toolbar) return;
+    
+    var toolbarHeight = toolbar.offsetHeight;
+    
+    // Create placeholder to prevent content jump
+    var placeholder = document.createElement('div');
+    placeholder.className = 'toolbar-placeholder';
+    placeholder.style.height = toolbarHeight + 'px';
+    toolbar.parentNode.insertBefore(placeholder, toolbar);
+    
+    // Store initial toolbar offset from document top
+    var initialToolbarOffsetTop = placeholder.offsetTop;
+    
+    function handleScroll() {
+      var editorTab = document.querySelector('[data-tab="editor"]');
+      var isEditorActive = editorTab && editorTab.classList.contains('active');
+      
+      if (!isEditorActive) {
+        toolbar.classList.remove('toolbar-fixed');
+        placeholder.classList.remove('active');
+        return;
+      }
+      
+      // Get tabs element to know where to fix toolbar
+      var tabs = document.querySelector('.tabs');
+      var tabsBottom = tabs ? tabs.getBoundingClientRect().bottom : 40;
+      
+      // Check if placeholder top has scrolled above tabs bottom
+      var placeholderTop = placeholder.getBoundingClientRect().top;
+      
+      if (placeholderTop <= tabsBottom) {
+        toolbar.classList.add('toolbar-fixed');
+        toolbar.style.top = tabsBottom + 'px';
+        placeholder.classList.add('active');
+      } else {
+        toolbar.classList.remove('toolbar-fixed');
+        toolbar.style.top = '';
+        placeholder.classList.remove('active');
+      }
+    }
+    
+    window.addEventListener('scroll', handleScroll);
+    handleScroll(); // Initial check
+  }, 500);
 }
 
 function getHelpGuideEN() {

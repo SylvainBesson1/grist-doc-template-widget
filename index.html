@@ -129,28 +129,9 @@
       z-index: 98;
       background: #f8fafc;
       padding: 8px 12px;
-      border-bottom: none;
+      border-bottom: 1px solid #e2e8f0;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
       display: none; /* Hidden by default, shown via JS for editor tab */
-    }
-    
-    /* ========== FIXED TOOLBAR BAR (Jodit toolbar) ========== */
-    .fixed-toolbar-bar {
-      position: fixed;
-      top: 130px; /* Below variables bar */
-      left: 0;
-      right: 0;
-      z-index: 97;
-      background: white;
-      padding: 6px 12px;
-      border-bottom: 2px solid #e2e8f0;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-      display: none; /* Hidden by default, shown via JS for editor tab */
-    }
-    .fixed-toolbar-bar .jodit-toolbar__box {
-      margin: 0 !important;
-      border: none !important;
-      box-shadow: none !important;
-      background: transparent !important;
     }
 
     /* ========== FIXED BOTTOM BAR (Templates) ========== */
@@ -170,7 +151,7 @@
     /* ========== MAIN CONTENT ========== */
     .main { padding: 12px; }
     #tab-editor .main {
-      padding-top: 220px; /* Space for: header(39) + tabs(38) + vars(53) + toolbar(90) */
+      padding-top: 140px;
       padding-bottom: 130px;
     }
     #tab-preview .main,
@@ -274,22 +255,20 @@
       border-radius: 0;
       overflow: visible;
     }
-    /* Toolbar styling - toolbar is moved to fixed bar */
+    /* Toolbar styling */
     .jodit-container { 
       border: none !important;
       background: transparent !important;
     }
     .jodit-toolbar__box {
-      background: transparent !important;
-      border: none !important;
-      border-radius: 0 !important;
-      box-shadow: none !important;
-      margin: 0 !important;
+      background: white !important;
+      border: 1px solid #e2e8f0 !important;
+      border-radius: 6px !important;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06) !important;
+      margin-bottom: 12px !important;
     }
     .jodit-workplace {
       min-height: 400px !important;
-      border: 1px solid #e2e8f0 !important;
-      border-radius: 8px !important;
     }
     .jodit-wysiwyg { font-family: 'Times New Roman', Times, serif; font-size: 14px; line-height: 1.6; }
     .jodit-wysiwyg table { border-collapse: collapse; }
@@ -735,9 +714,6 @@
         <div id="var-chips"></div>
       </div>
     </div>
-
-    <!-- FIXED TOOLBAR BAR (Jodit toolbar will be moved here) -->
-    <div class="fixed-toolbar-bar" id="fixed-toolbar-bar"></div>
 
     <!-- ==================== TAB: EDITOR ==================== -->
     <div class="tab-content active" id="tab-editor">

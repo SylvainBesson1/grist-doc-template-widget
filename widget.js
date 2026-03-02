@@ -4571,95 +4571,54 @@ var showRulers = false;
 function toggleRulers() {
   showRulers = !showRulers;
   var btn = document.getElementById('ruler-toggle-btn');
-  var rulersContainer = document.getElementById('rulers-container');
+  var wrapper = document.getElementById('editor-page-wrapper');
   
   if (btn) btn.classList.toggle('active', showRulers);
-  if (rulersContainer) rulersContainer.classList.toggle('show', showRulers);
+  if (wrapper) wrapper.classList.toggle('editor-page-with-rulers', showRulers);
   
   if (showRulers) {
-    setTimeout(generateRulerMarks, 100);
+    generateRulerMarks();
   }
 }
 
 function generateRulerMarks() {
-  var rulerH = document.getElementById('ruler-h');
-  var rulerV = document.getElementById('ruler-v');
-  var rulerCorner = document.getElementById('ruler-corner');
   var rulerHMarks = document.getElementById('ruler-h-marks');
   var rulerVMarks = document.getElementById('ruler-v-marks');
-  var joditWysiwyg = document.querySelector('.jodit-wysiwyg');
   
-  if (!rulerHMarks || !rulerVMarks || !joditWysiwyg) return;
+  if (!rulerHMarks || !rulerVMarks) return;
   
-  // Get jodit-wysiwyg (the content area) position relative to editor-wrapper
+  // A4 = 210mm x 297mm
+  // At 96dpi: 1mm = 3.7795px, 1cm = 37.795px
+  // The editor-wrapper width IS the page (794px = 210mm)
+  // So the ruler should scale: ruler pixel width / A4 cm width
+  // ruler-h takes the full width of column 2 in the grid = editor-wrapper width
   var editorWrapper = document.querySelector('.editor-wrapper');
-  var contentRect = joditWysiwyg.getBoundingClientRect();
-  var wrapperRect = editorWrapper.getBoundingClientRect();
+  var rulerWidth = editorWrapper ? editorWrapper.offsetWidth : 794;
+  var pxPerCm = rulerWidth / 21.0; // Scale to fit exactly 21cm
   
-  // Calculate offsets (where the content starts - this includes the 60px padding)
-  var offsetLeft = contentRect.left - wrapperRect.left;
-  var offsetTop = contentRect.top - wrapperRect.top;
-  
-  // Position rulers at the edge of the page
-  var rulerHeight = 18;
-  var rulerWidth = 25;
-  
-  // A4 dimensions: 210mm x 297mm = 794px x 1123px at 96dpi
-  var pageWidth = 794;
-  var pageHeight = joditWysiwyg.offsetHeight || 1123;
-  
-  // The jodit-wysiwyg has padding: 40px 60px, so the page edge is at:
-  // Left edge of page = left edge of content - 60px padding
-  // Top edge of page = top edge of content - 40px padding
-  // But we want rulers OUTSIDE the page, so position them relative to content
-  
-  // Position rulers at the top-left of the CONTENT area (where text starts)
-  // This way 0cm = where the text margin starts
-  // Add 8px gap to ensure visibility on all screens (Mac/PC)
-  var rulerGap = 8;
-  
-  if (rulerCorner) {
-    rulerCorner.style.left = (offsetLeft - rulerWidth) + 'px';
-    rulerCorner.style.top = (offsetTop - rulerHeight - rulerGap) + 'px';
-  }
-  
-  // Position horizontal ruler at top of content with gap
-  if (rulerH) {
-    rulerH.style.left = offsetLeft + 'px';
-    rulerH.style.top = (offsetTop - rulerHeight - rulerGap) + 'px';
-    rulerH.style.width = (pageWidth - 120) + 'px'; // 794 - 2*60px padding
-  }
-  
-  // Position vertical ruler at left of content
-  if (rulerV) {
-    rulerV.style.left = (offsetLeft - rulerWidth) + 'px';
-    rulerV.style.top = offsetTop + 'px';
-    rulerV.style.height = (pageHeight - 80) + 'px'; // height - 2*40px padding
-  }
-  
-  // 1cm = 37.8px at 96dpi
-  var cmToPx = 37.8;
-  
-  // Horizontal ruler marks (21cm for A4 width)
+  // Horizontal ruler marks (0 to 21 cm)
   var hHtml = '';
   for (var i = 0; i <= 21; i++) {
-    var pos = i * cmToPx;
-    var majorClass = (i % 5 === 0) ? ' major' : '';
-    hHtml += '<div class="ruler-mark' + majorClass + '" style="left: ' + pos + 'px;">' + i + '</div>';
+    var pos = i * pxPerCm;
+    var cls = (i % 10 === 0) ? 'cm10' : (i % 5 === 0) ? 'cm5' : '';
+    hHtml += '<div class="ruler-mark ' + cls + '" style="left: ' + pos + 'px;">' + i + '</div>';
   }
   rulerHMarks.innerHTML = hHtml;
   
-  // Vertical ruler marks (30cm for A4 height)
+  // Vertical ruler: height of the page
+  var pageHeight = editorWrapper ? editorWrapper.offsetHeight : 1123;
+  var vPxPerCm = pageHeight / 29.7; // Scale to fit 29.7cm
+  
   var vHtml = '';
   for (var i = 0; i <= 30; i++) {
-    var pos = i * cmToPx;
-    var majorClass = (i % 5 === 0) ? ' major' : '';
-    vHtml += '<div class="ruler-mark' + majorClass + '" style="top: ' + pos + 'px;">' + i + '</div>';
+    var pos = i * vPxPerCm;
+    var cls = (i % 10 === 0) ? 'cm10' : (i % 5 === 0) ? 'cm5' : '';
+    vHtml += '<div class="ruler-mark ' + cls + '" style="top: ' + pos + 'px;">' + i + '</div>';
   }
   rulerVMarks.innerHTML = vHtml;
 }
 
-// Update rulers on scroll and resize
+// Update rulers on resize
 window.addEventListener('resize', function() {
   if (showRulers) {
     generateRulerMarks();

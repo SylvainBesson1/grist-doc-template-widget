@@ -2281,8 +2281,8 @@ function initEditor() {
     }
   });
   
-  // Initialize sticky toolbar after editor is ready
-  setTimeout(initStickyToolbar, 100);
+  // Sticky toolbar disabled - causes issues with variables bar
+  // setTimeout(initStickyToolbar, 100);
 }
 
 // =============================================================================

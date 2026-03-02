@@ -4405,8 +4405,8 @@ function initStickyToolbar() {
     var toolbar = document.querySelector('.jodit-toolbar__box');
     if (!toolbar) return;
     
-    var toolbarRect = toolbar.getBoundingClientRect();
-    var toolbarTop = toolbarRect.top + window.scrollY;
+    // Get the variables bar position to know where to fix the toolbar
+    var varsBar = document.querySelector('.variables-bar');
     var toolbarHeight = toolbar.offsetHeight;
     
     // Create placeholder to prevent content jump
@@ -4416,7 +4416,6 @@ function initStickyToolbar() {
     toolbar.parentNode.insertBefore(placeholder, toolbar);
     
     function handleScroll() {
-      var scrollY = window.scrollY;
       var editorTab = document.querySelector('[data-tab="editor"]');
       var isEditorActive = editorTab && editorTab.classList.contains('active');
       
@@ -4426,9 +4425,17 @@ function initStickyToolbar() {
         return;
       }
       
-      if (scrollY > toolbarTop - 10) {
+      // Calculate the trigger point - when toolbar would go above the variables bar
+      var varsBarBottom = varsBar ? varsBar.getBoundingClientRect().bottom : 125;
+      var toolbarRect = placeholder.classList.contains('active') 
+        ? placeholder.getBoundingClientRect() 
+        : toolbar.getBoundingClientRect();
+      
+      if (toolbarRect.top < varsBarBottom) {
         toolbar.classList.add('toolbar-fixed');
         placeholder.classList.add('active');
+        // Update CSS variable for top position
+        toolbar.style.top = varsBarBottom + 'px';
       } else {
         toolbar.classList.remove('toolbar-fixed');
         placeholder.classList.remove('active');

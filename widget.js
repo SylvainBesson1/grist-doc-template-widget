@@ -4688,9 +4688,9 @@ function togglePreviewRulers() {
   if (btn) btn.classList.toggle('active', showPreviewRulers);
   
   var disp = showPreviewRulers ? 'block' : 'none';
-  if (rulerH) { rulerH.style.display = disp; rulerH.style.position = 'absolute'; rulerH.style.zIndex = '100'; }
-  if (rulerV) { rulerV.style.display = disp; rulerV.style.position = 'absolute'; rulerV.style.zIndex = '100'; }
-  if (rulerCorner) { rulerCorner.style.display = disp; rulerCorner.style.position = 'absolute'; rulerCorner.style.zIndex = '100'; }
+  if (rulerH) { rulerH.style.display = disp; rulerH.style.position = 'absolute'; rulerH.style.zIndex = '5'; }
+  if (rulerV) { rulerV.style.display = disp; rulerV.style.position = 'absolute'; rulerV.style.zIndex = '5'; }
+  if (rulerCorner) { rulerCorner.style.display = disp; rulerCorner.style.position = 'absolute'; rulerCorner.style.zIndex = '5'; }
   
   if (showPreviewRulers) {
     setTimeout(positionPreviewRulers, 100);

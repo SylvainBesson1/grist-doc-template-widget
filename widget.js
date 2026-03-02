@@ -3903,123 +3903,143 @@ function splitOnPageBreaks(html) {
 }
 
 function autoPageBreak(html, wrapper) {
-  // Get the page format to determine max content height
   var isLetter = wrapper.classList.contains('preview-format-letter');
-  var pageHeight = isLetter ? 1056 : 1123; // A4 or Letter
+  var pageHeight = isLetter ? 1056 : 1123;
   var paddingTop = 40, paddingBottom = 40;
-  var maxContentHeight = pageHeight - paddingTop - paddingBottom;
+  var maxH = pageHeight - paddingTop - paddingBottom;
+  var pageW = isLetter ? '816px' : '794px';
   
-  // Create a hidden measurer with same styles as preview-page
-  var measurer = document.createElement('div');
-  measurer.style.cssText = 'position:absolute;left:-9999px;top:-9999px;width:794px;padding:0 60px;font-family:Times New Roman,Times,serif;font-size:14px;line-height:1.6;visibility:hidden;';
-  if (isLetter) measurer.style.width = '816px';
-  document.body.appendChild(measurer);
+  // Hidden measurer with same styles as preview-page
+  var m = document.createElement('div');
+  m.style.cssText = 'position:absolute;left:-9999px;top:-9999px;width:' + pageW + ';padding:0 60px;font-family:Times New Roman,Times,serif;font-size:14px;line-height:1.6;visibility:hidden;';
+  document.body.appendChild(m);
   
-  // Parse the HTML into a temp container
   var container = document.createElement('div');
   container.innerHTML = html;
   
   var pages = [];
-  var currentPageHtml = '';
-  var currentHeight = 0;
+  var curHtml = '';
+  var curH = 0;
   
-  // Get all top-level child nodes
   var children = Array.prototype.slice.call(container.childNodes);
   
   for (var i = 0; i < children.length; i++) {
     var child = children[i];
+    var childOuterHtml = child.outerHTML || child.textContent || '';
+    if (!childOuterHtml.trim()) continue;
     
-    // Measure this element
-    measurer.innerHTML = '';
-    var clone = child.cloneNode(true);
-    measurer.appendChild(clone);
-    var childHeight = measurer.offsetHeight;
+    // Measure child height
+    m.innerHTML = childOuterHtml;
+    var cH = m.offsetHeight;
     
-    if (currentHeight + childHeight > maxContentHeight && currentPageHtml.trim().length > 0) {
-      // This element would overflow - start a new page
-      pages.push(currentPageHtml);
-      currentPageHtml = '';
-      currentHeight = 0;
+    // Case 1: fits on current page
+    if (curH + cH <= maxH) {
+      curHtml += childOuterHtml;
+      curH += cH;
+      continue;
     }
     
-    // If a single element (e.g. a table) is taller than one page, 
-    // try to split table rows across pages
-    if (childHeight > maxContentHeight && child.nodeName === 'TABLE') {
-      var tablePages = splitTableAcrossPages(child, measurer, maxContentHeight, currentHeight);
-      for (var tp = 0; tp < tablePages.length; tp++) {
-        if (tp === 0 && currentPageHtml.trim().length > 0) {
-          pages.push(currentPageHtml + tablePages[tp]);
-        } else if (tp === 0) {
-          pages.push(tablePages[tp]);
+    // Case 2: doesn't fit, and it's a TABLE -> split rows
+    if (child.nodeName === 'TABLE') {
+      var tPages = splitTableAcrossPages(child, m, maxH, curH);
+      if (tPages.length > 0) {
+        // First chunk goes with current page content
+        curHtml += tPages[0];
+        pages.push(curHtml);
+        // Middle chunks are their own pages
+        for (var t = 1; t < tPages.length - 1; t++) {
+          pages.push(tPages[t]);
+        }
+        // Last chunk starts the next page (unless only 1 chunk)
+        if (tPages.length > 1) {
+          curHtml = tPages[tPages.length - 1];
+          // Measure last chunk to know remaining height
+          m.innerHTML = curHtml;
+          curH = m.offsetHeight;
         } else {
-          pages.push(tablePages[tp]);
+          curHtml = '';
+          curH = 0;
         }
       }
-      currentPageHtml = '';
-      currentHeight = 0;
-    } else {
-      currentPageHtml += (child.outerHTML || child.textContent || '');
-      currentHeight += childHeight;
+      continue;
     }
+    
+    // Case 3: non-table element doesn't fit -> push current page, start new
+    if (curHtml.trim()) {
+      pages.push(curHtml);
+    }
+    curHtml = childOuterHtml;
+    curH = cH;
   }
   
-  if (currentPageHtml.trim().length > 0) {
-    pages.push(currentPageHtml);
+  if (curHtml.trim()) {
+    pages.push(curHtml);
   }
   
-  document.body.removeChild(measurer);
-  
+  document.body.removeChild(m);
   return pages.length > 0 ? pages : [html];
 }
 
-function splitTableAcrossPages(table, measurer, maxHeight, startHeight) {
-  var pages = [];
+function splitTableAcrossPages(table, measurer, maxH, startH) {
   var thead = table.querySelector('thead');
   var theadHtml = thead ? thead.outerHTML : '';
   
-  // Measure thead height
-  var theadHeight = 0;
+  // Measure thead
+  var theadH = 0;
   if (thead) {
-    measurer.innerHTML = '<table style="border-collapse:collapse;width:100%;">' + theadHtml + '</table>';
-    theadHeight = measurer.offsetHeight;
+    measurer.innerHTML = '<table style="border-collapse:collapse;width:100%">' + theadHtml + '</table>';
+    theadH = measurer.offsetHeight;
   }
   
-  var rows = table.querySelectorAll('tbody tr, tr');
-  // Filter out rows that are in thead
+  // Collect body rows (exclude thead rows)
+  var allRows = table.querySelectorAll('tr');
   var bodyRows = [];
-  for (var r = 0; r < rows.length; r++) {
-    if (!thead || !thead.contains(rows[r])) {
-      bodyRows.push(rows[r]);
+  for (var r = 0; r < allRows.length; r++) {
+    if (!thead || !thead.contains(allRows[r])) {
+      bodyRows.push(allRows[r]);
     }
   }
   
-  var tableStyle = table.getAttribute('style') || '';
-  var tableClass = table.getAttribute('class') || '';
-  var tableOpen = '<table' + (tableStyle ? ' style="' + tableStyle + '"' : '') + (tableClass ? ' class="' + tableClass + '"' : '') + ' style="border-collapse:collapse;width:100%;">';
+  // Build table opening tag preserving original attributes
+  var attrs = '';
+  for (var a = 0; a < table.attributes.length; a++) {
+    var attr = table.attributes[a];
+    if (attr.name === 'style') {
+      attrs += ' style="border-collapse:collapse;width:100%;' + attr.value + '"';
+    } else {
+      attrs += ' ' + attr.name + '="' + attr.value + '"';
+    }
+  }
+  if (attrs.indexOf('style') === -1) {
+    attrs += ' style="border-collapse:collapse;width:100%"';
+  }
+  var tOpen = '<table' + attrs + '>';
   
-  var currentRows = '';
-  var currentHeight = startHeight + theadHeight;
+  var pages = [];
+  var curRows = '';
+  var curH = startH + theadH;
   
   for (var r = 0; r < bodyRows.length; r++) {
     var rowHtml = bodyRows[r].outerHTML;
     
-    // Measure row height
-    measurer.innerHTML = '<table style="border-collapse:collapse;width:100%;"><tbody>' + rowHtml + '</tbody></table>';
-    var rowHeight = measurer.offsetHeight;
+    // Measure this row
+    measurer.innerHTML = '<table style="border-collapse:collapse;width:100%"><tbody>' + rowHtml + '</tbody></table>';
+    var rH = measurer.offsetHeight;
     
-    if (currentHeight + rowHeight > maxHeight && currentRows.length > 0) {
-      // Flush current page
-      pages.push(tableOpen + theadHtml + '<tbody>' + currentRows + '</tbody></table>');
-      currentRows = '';
-      currentHeight = theadHeight; // New page starts with thead
+    // Would this row overflow?
+    if (curH + rH > maxH && curRows.length > 0) {
+      pages.push(tOpen + theadHtml + '<tbody>' + curRows + '</tbody></table>');
+      curRows = '';
+      curH = theadH; // new page starts with thead
     }
     
-    currentRows += rowHtml;
-    currentHeight += rowHeight;
+    curRows += rowHtml;
+    curH += rH;
   }
   
-  if (currentRows.length > 0) {
-    pages.push(tableOpen + theadHtml + '<tbody>' + currentRows + '</tbody></table>');
+  // Don't forget remaining rows!
+  if (curRows.length > 0) {
+    pages.push(tOpen + theadHtml + '<tbody>' + curRows + '</tbody></table>');
   }
   
   return pages.length > 0 ? pages : [table.outerHTML];

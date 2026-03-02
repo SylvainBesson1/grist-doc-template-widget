@@ -360,17 +360,18 @@
     }
 
     /* ========== RULERS ========== */
-    .ruler { background: #f8fafc; position: absolute; z-index: 60; }
-    .ruler-h { top: 0; left: 30px; height: 20px; border-bottom: 1px solid #e2e8f0; display: none; width: calc(100% - 30px); }
-    .ruler-v { top: 20px; left: 0; width: 30px; height: calc(100% - 20px); border-right: 1px solid #e2e8f0; display: none; }
+    .ruler-container { position: relative; }
+    .ruler { background: #f8fafc; position: absolute; z-index: 100; display: none; }
+    .ruler-h { top: -25px; left: 0; height: 20px; border-bottom: 1px solid #cbd5e1; width: 100%; overflow: hidden; }
+    .ruler-v { top: 0; left: -35px; width: 30px; height: 100%; border-right: 1px solid #cbd5e1; overflow: hidden; }
     .ruler.show { display: block; }
     .ruler-marks { position: relative; height: 100%; width: 100%; }
-    .ruler-h .ruler-mark { position: absolute; top: 0; height: 100%; border-left: 1px solid #cbd5e1; font-size: 9px; color: #64748b; padding-left: 2px; line-height: 20px; }
-    .ruler-v .ruler-mark { position: absolute; left: 0; width: 100%; border-top: 1px solid #cbd5e1; font-size: 9px; color: #64748b; writing-mode: vertical-rl; text-orientation: mixed; padding-top: 2px; }
-    .ruler-corner { position: absolute; top: 0; left: 0; width: 30px; height: 20px; background: #f8fafc; border-right: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0; z-index: 61; display: none; font-size: 8px; color: #94a3b8; text-align: center; line-height: 20px; }
+    .ruler-h .ruler-mark { position: absolute; top: 0; height: 100%; border-left: 1px solid #94a3b8; font-size: 9px; color: #475569; padding-left: 2px; line-height: 20px; }
+    .ruler-v .ruler-mark { position: absolute; left: 0; width: 100%; border-top: 1px solid #94a3b8; font-size: 9px; color: #475569; writing-mode: vertical-rl; text-orientation: mixed; padding-top: 2px; }
+    .ruler-corner { position: absolute; top: -25px; left: -35px; width: 30px; height: 20px; background: #f1f5f9; border-right: 1px solid #cbd5e1; border-bottom: 1px solid #cbd5e1; z-index: 101; display: none; font-size: 8px; color: #64748b; text-align: center; line-height: 20px; }
     .ruler-corner.show { display: block; }
-    .editor-page-wrapper-with-rulers { padding-top: 20px; padding-left: 30px; }
-    .ruler-toggle-btn { position: absolute; top: 5px; right: 5px; z-index: 62; background: white; border: 1px solid #e2e8f0; border-radius: 4px; padding: 4px 8px; font-size: 11px; cursor: pointer; color: #64748b; transition: all 0.2s; }
+    .editor-page-wrapper-with-rulers .editor-wrapper { margin-top: 25px; margin-left: 35px; }
+    .ruler-toggle-btn { position: fixed; top: 82px; right: 20px; z-index: 200; background: white; border: 1px solid #e2e8f0; border-radius: 4px; padding: 4px 8px; font-size: 11px; cursor: pointer; color: #64748b; transition: all 0.2s; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
     .ruler-toggle-btn:hover { background: #f1f5f9; color: #3b82f6; }
     .ruler-toggle-btn.active { background: #3b82f6; color: white; border-color: #3b82f6; }
 
@@ -778,11 +779,11 @@
 
         <!-- EDITOR -->
         <div id="editor-page-wrapper" class="editor-page-a4">
-          <button class="ruler-toggle-btn" id="ruler-toggle-btn" onclick="toggleRulers()" title="Afficher/Masquer les règles">📏</button>
-          <div class="ruler-corner" id="ruler-corner">cm</div>
-          <div class="ruler ruler-h" id="ruler-h"><div class="ruler-marks" id="ruler-h-marks"></div></div>
-          <div class="ruler ruler-v" id="ruler-v"><div class="ruler-marks" id="ruler-v-marks"></div></div>
+          <button class="ruler-toggle-btn" id="ruler-toggle-btn" onclick="toggleRulers()" title="Afficher/Masquer les règles">📏 Règle</button>
           <div class="editor-wrapper">
+            <div class="ruler-corner" id="ruler-corner">cm</div>
+            <div class="ruler ruler-h" id="ruler-h"><div class="ruler-marks" id="ruler-h-marks"></div></div>
+            <div class="ruler ruler-v" id="ruler-v"><div class="ruler-marks" id="ruler-v-marks"></div></div>
             <textarea id="editor-container"></textarea>
           </div>
         </div>

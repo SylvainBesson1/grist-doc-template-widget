@@ -4583,39 +4583,23 @@ function toggleRulers() {
   wrapper.classList.toggle('editor-page-wrapper-with-rulers', showRulers);
   
   if (showRulers) {
-    setTimeout(generateRulerMarks, 50);
+    setTimeout(generateRulerMarks, 100);
   }
 }
 
 function generateRulerMarks() {
   var rulerHMarks = document.getElementById('ruler-h-marks');
   var rulerVMarks = document.getElementById('ruler-v-marks');
-  var wrapper = document.getElementById('editor-page-wrapper');
   
-  // Find the actual editable area (jodit-wysiwyg)
-  var joditArea = wrapper.querySelector('.jodit-wysiwyg');
-  if (!joditArea) {
-    // Fallback to editor-wrapper if jodit not yet initialized
-    joditArea = wrapper.querySelector('.editor-wrapper');
-  }
-  if (!joditArea) return;
-  
-  // Get positions
-  var wrapperRect = wrapper.getBoundingClientRect();
-  var pageRect = joditArea.getBoundingClientRect();
-  
-  // Calculate offset: where the page content starts relative to the ruler
-  // The ruler-h starts at left: 30px, ruler-v starts at top: 20px
-  var offsetX = pageRect.left - wrapperRect.left - 30;
-  var offsetY = pageRect.top - wrapperRect.top - 20;
+  if (!rulerHMarks || !rulerVMarks) return;
   
   // 1cm = 37.8px at 96dpi
   var cmToPx = 37.8;
   
-  // Horizontal ruler (21cm for A4 width)
+  // Horizontal ruler (21cm for A4 width = 210mm)
   var hHtml = '';
   for (var i = 0; i <= 21; i++) {
-    var pos = offsetX + (i * cmToPx);
+    var pos = i * cmToPx;
     hHtml += '<div class="ruler-mark" style="left: ' + pos + 'px;">' + i + '</div>';
   }
   rulerHMarks.innerHTML = hHtml;
@@ -4623,7 +4607,7 @@ function generateRulerMarks() {
   // Vertical ruler (30cm to cover A4 height of 29.7cm)
   var vHtml = '';
   for (var i = 0; i <= 30; i++) {
-    var pos = offsetY + (i * cmToPx);
+    var pos = i * cmToPx;
     vHtml += '<div class="ruler-mark" style="top: ' + pos + 'px;">' + i + '</div>';
   }
   rulerVMarks.innerHTML = vHtml;

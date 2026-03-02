@@ -3856,20 +3856,21 @@ function renderPreview() {
   var record = getRecordAt(currentRecordIndex);
   var resolved = resolveTemplate(templateHtml, record);
 
-  // Split at page break markers to show separate visual pages
-  var pages = splitPreviewIntoPages(resolved);
+  // Split at explicit page break markers first
+  var explicitPages = splitOnPageBreaks(resolved);
+  
+  // Then auto-paginate each section that overflows
+  var pages = [];
+  for (var ep = 0; ep < explicitPages.length; ep++) {
+    var subPages = autoPageBreak(explicitPages[ep], wrapper);
+    pages = pages.concat(subPages);
+  }
+  
   var html = '';
   for (var p = 0; p < pages.length; p++) {
     html += '<div class="preview-page">' + pages[p] + '</div>';
-    if (p < pages.length - 1) {
-      html += '<div class="preview-page-number">' +
-        (currentLang === 'fr' ? 'Page ' : 'Page ') + (p + 1) + ' / ' + pages.length +
-        '</div>';
-    }
-  }
-  if (pages.length > 1) {
     html += '<div class="preview-page-number">' +
-      (currentLang === 'fr' ? 'Page ' : 'Page ') + pages.length + ' / ' + pages.length +
+      (currentLang === 'fr' ? 'Page ' : 'Page ') + (p + 1) + ' / ' + pages.length +
       '</div>';
   }
   removePreviewPages(wrapper);
@@ -3888,8 +3889,7 @@ function removePreviewPages(wrapper) {
   }
 }
 
-function splitPreviewIntoPages(html) {
-  // First split on explicit page-break markers
+function splitOnPageBreaks(html) {
   var parts = html.split(/<div[^>]*class="page-break-marker"[^>]*>[\s\S]*?<\/div>/g);
   parts = parts.reduce(function(acc, part) {
     var subParts = part.split(/<div[^>]*style="[^"]*page-break-after:\s*always[^"]*"[^>]*>\s*<\/div>/g);
@@ -3899,12 +3899,130 @@ function splitPreviewIntoPages(html) {
     var subParts = part.split(/<hr[^>]*style="[^"]*page-break[^"]*"[^>]*\/?>/g);
     return acc.concat(subParts);
   }, []);
-  parts = parts.filter(function(p) { return p.trim().length > 0; });
+  return parts.filter(function(p) { return p.trim().length > 0; });
+}
 
-  // Preview shows content as-is (no automatic height-based pagination)
-  // The PDF generation handles pagination correctly
-  // Preview only splits on explicit page-break markers
-  return parts;
+function autoPageBreak(html, wrapper) {
+  // Get the page format to determine max content height
+  var isLetter = wrapper.classList.contains('preview-format-letter');
+  var pageHeight = isLetter ? 1056 : 1123; // A4 or Letter
+  var paddingTop = 40, paddingBottom = 40;
+  var maxContentHeight = pageHeight - paddingTop - paddingBottom;
+  
+  // Create a hidden measurer with same styles as preview-page
+  var measurer = document.createElement('div');
+  measurer.style.cssText = 'position:absolute;left:-9999px;top:-9999px;width:794px;padding:0 60px;font-family:Times New Roman,Times,serif;font-size:14px;line-height:1.6;visibility:hidden;';
+  if (isLetter) measurer.style.width = '816px';
+  document.body.appendChild(measurer);
+  
+  // Parse the HTML into a temp container
+  var container = document.createElement('div');
+  container.innerHTML = html;
+  
+  var pages = [];
+  var currentPageHtml = '';
+  var currentHeight = 0;
+  
+  // Get all top-level child nodes
+  var children = Array.prototype.slice.call(container.childNodes);
+  
+  for (var i = 0; i < children.length; i++) {
+    var child = children[i];
+    
+    // Measure this element
+    measurer.innerHTML = '';
+    var clone = child.cloneNode(true);
+    measurer.appendChild(clone);
+    var childHeight = measurer.offsetHeight;
+    
+    if (currentHeight + childHeight > maxContentHeight && currentPageHtml.trim().length > 0) {
+      // This element would overflow - start a new page
+      pages.push(currentPageHtml);
+      currentPageHtml = '';
+      currentHeight = 0;
+    }
+    
+    // If a single element (e.g. a table) is taller than one page, 
+    // try to split table rows across pages
+    if (childHeight > maxContentHeight && child.nodeName === 'TABLE') {
+      var tablePages = splitTableAcrossPages(child, measurer, maxContentHeight, currentHeight);
+      for (var tp = 0; tp < tablePages.length; tp++) {
+        if (tp === 0 && currentPageHtml.trim().length > 0) {
+          pages.push(currentPageHtml + tablePages[tp]);
+        } else if (tp === 0) {
+          pages.push(tablePages[tp]);
+        } else {
+          pages.push(tablePages[tp]);
+        }
+      }
+      currentPageHtml = '';
+      currentHeight = 0;
+    } else {
+      currentPageHtml += (child.outerHTML || child.textContent || '');
+      currentHeight += childHeight;
+    }
+  }
+  
+  if (currentPageHtml.trim().length > 0) {
+    pages.push(currentPageHtml);
+  }
+  
+  document.body.removeChild(measurer);
+  
+  return pages.length > 0 ? pages : [html];
+}
+
+function splitTableAcrossPages(table, measurer, maxHeight, startHeight) {
+  var pages = [];
+  var thead = table.querySelector('thead');
+  var theadHtml = thead ? thead.outerHTML : '';
+  
+  // Measure thead height
+  var theadHeight = 0;
+  if (thead) {
+    measurer.innerHTML = '<table style="border-collapse:collapse;width:100%;">' + theadHtml + '</table>';
+    theadHeight = measurer.offsetHeight;
+  }
+  
+  var rows = table.querySelectorAll('tbody tr, tr');
+  // Filter out rows that are in thead
+  var bodyRows = [];
+  for (var r = 0; r < rows.length; r++) {
+    if (!thead || !thead.contains(rows[r])) {
+      bodyRows.push(rows[r]);
+    }
+  }
+  
+  var tableStyle = table.getAttribute('style') || '';
+  var tableClass = table.getAttribute('class') || '';
+  var tableOpen = '<table' + (tableStyle ? ' style="' + tableStyle + '"' : '') + (tableClass ? ' class="' + tableClass + '"' : '') + ' style="border-collapse:collapse;width:100%;">';
+  
+  var currentRows = '';
+  var currentHeight = startHeight + theadHeight;
+  
+  for (var r = 0; r < bodyRows.length; r++) {
+    var rowHtml = bodyRows[r].outerHTML;
+    
+    // Measure row height
+    measurer.innerHTML = '<table style="border-collapse:collapse;width:100%;"><tbody>' + rowHtml + '</tbody></table>';
+    var rowHeight = measurer.offsetHeight;
+    
+    if (currentHeight + rowHeight > maxHeight && currentRows.length > 0) {
+      // Flush current page
+      pages.push(tableOpen + theadHtml + '<tbody>' + currentRows + '</tbody></table>');
+      currentRows = '';
+      currentHeight = theadHeight; // New page starts with thead
+    }
+    
+    currentRows += rowHtml;
+    currentHeight += rowHeight;
+  }
+  
+  if (currentRows.length > 0) {
+    pages.push(tableOpen + theadHtml + '<tbody>' + currentRows + '</tbody></table>');
+  }
+  
+  return pages.length > 0 ? pages : [table.outerHTML];
 }
 
 function prevRecord() {

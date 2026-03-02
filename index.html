@@ -360,16 +360,17 @@
     }
 
     /* ========== RULERS ========== */
-    .ruler { background: #f8fafc; position: absolute; z-index: 5; display: none; pointer-events: none; }
-    .ruler-h { top: 0; left: 0; height: 20px; border-bottom: 1px solid #cbd5e1; width: 100%; overflow: hidden; }
-    .ruler-v { top: 20px; left: -32px; width: 30px; border-right: 1px solid #cbd5e1; overflow: hidden; }
-    .ruler.show { display: block; }
+    .rulers-container { position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; display: none; z-index: 5; }
+    .rulers-container.show { display: block; }
+    .ruler { background: #f8fafc; position: absolute; }
+    .ruler-h { height: 18px; border-bottom: 1px solid #94a3b8; }
+    .ruler-v { width: 25px; border-right: 1px solid #94a3b8; }
     .ruler-marks { position: relative; height: 100%; width: 100%; }
-    .ruler-h .ruler-mark { position: absolute; top: 0; height: 100%; border-left: 1px solid #94a3b8; font-size: 9px; color: #475569; padding-left: 2px; line-height: 20px; }
-    .ruler-v .ruler-mark { position: absolute; left: 0; width: 100%; border-top: 1px solid #94a3b8; font-size: 9px; color: #475569; writing-mode: vertical-rl; text-orientation: mixed; padding-top: 2px; }
-    .ruler-corner { position: absolute; top: 0; left: -32px; width: 30px; height: 20px; background: #f1f5f9; border-right: 1px solid #cbd5e1; border-bottom: 1px solid #cbd5e1; z-index: 6; display: none; font-size: 8px; color: #64748b; text-align: center; line-height: 20px; }
-    .ruler-corner.show { display: block; }
-    .editor-page-wrapper-with-rulers { padding-top: 25px !important; padding-left: 35px !important; }
+    .ruler-h .ruler-mark { position: absolute; top: 0; height: 100%; border-left: 1px solid #cbd5e1; font-size: 8px; color: #475569; padding-left: 1px; line-height: 18px; }
+    .ruler-h .ruler-mark.major { border-left-color: #94a3b8; }
+    .ruler-v .ruler-mark { position: absolute; left: 0; width: 100%; border-top: 1px solid #cbd5e1; font-size: 8px; color: #475569; writing-mode: vertical-rl; text-orientation: mixed; padding-top: 1px; }
+    .ruler-v .ruler-mark.major { border-top-color: #94a3b8; }
+    .ruler-corner { position: absolute; width: 25px; height: 18px; background: #e2e8f0; border-right: 1px solid #94a3b8; border-bottom: 1px solid #94a3b8; font-size: 7px; color: #64748b; text-align: center; line-height: 18px; }
     #ruler-toggle-btn.active { background: #3b82f6 !important; color: white !important; border-color: #3b82f6 !important; }
 
     /* ========== PAGE FORMAT VISUAL ========== */
@@ -780,9 +781,11 @@
         <!-- EDITOR -->
         <div id="editor-page-wrapper" class="editor-page-a4">
           <div class="editor-wrapper" style="position:relative;">
-            <div class="ruler-corner" id="ruler-corner">cm</div>
-            <div class="ruler ruler-h" id="ruler-h"><div class="ruler-marks" id="ruler-h-marks"></div></div>
-            <div class="ruler ruler-v" id="ruler-v"><div class="ruler-marks" id="ruler-v-marks"></div></div>
+            <div class="rulers-container" id="rulers-container">
+              <div class="ruler-corner" id="ruler-corner">cm</div>
+              <div class="ruler ruler-h" id="ruler-h"><div class="ruler-marks" id="ruler-h-marks"></div></div>
+              <div class="ruler ruler-v" id="ruler-v"><div class="ruler-marks" id="ruler-v-marks"></div></div>
+            </div>
             <textarea id="editor-container"></textarea>
           </div>
         </div>

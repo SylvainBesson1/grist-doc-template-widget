@@ -4571,16 +4571,10 @@ var showRulers = false;
 function toggleRulers() {
   showRulers = !showRulers;
   var btn = document.getElementById('ruler-toggle-btn');
-  var rulerH = document.getElementById('ruler-h');
-  var rulerV = document.getElementById('ruler-v');
-  var rulerCorner = document.getElementById('ruler-corner');
-  var wrapper = document.getElementById('editor-page-wrapper');
+  var rulersContainer = document.getElementById('rulers-container');
   
   if (btn) btn.classList.toggle('active', showRulers);
-  if (rulerH) rulerH.classList.toggle('show', showRulers);
-  if (rulerV) rulerV.classList.toggle('show', showRulers);
-  if (rulerCorner) rulerCorner.classList.toggle('show', showRulers);
-  if (wrapper) wrapper.classList.toggle('editor-page-wrapper-with-rulers', showRulers);
+  if (rulersContainer) rulersContainer.classList.toggle('show', showRulers);
   
   if (showRulers) {
     setTimeout(generateRulerMarks, 100);
@@ -4588,39 +4582,66 @@ function toggleRulers() {
 }
 
 function generateRulerMarks() {
+  var rulerH = document.getElementById('ruler-h');
+  var rulerV = document.getElementById('ruler-v');
+  var rulerCorner = document.getElementById('ruler-corner');
   var rulerHMarks = document.getElementById('ruler-h-marks');
   var rulerVMarks = document.getElementById('ruler-v-marks');
-  var rulerV = document.getElementById('ruler-v');
   var joditArea = document.querySelector('.jodit-wysiwyg');
   
-  if (!rulerHMarks || !rulerVMarks) return;
+  if (!rulerHMarks || !rulerVMarks || !joditArea) return;
+  
+  // Get jodit-wysiwyg position relative to editor-wrapper
+  var editorWrapper = document.querySelector('.editor-wrapper');
+  var joditRect = joditArea.getBoundingClientRect();
+  var wrapperRect = editorWrapper.getBoundingClientRect();
+  
+  // Calculate offsets (where jodit content starts)
+  var offsetLeft = joditRect.left - wrapperRect.left;
+  var offsetTop = joditRect.top - wrapperRect.top;
+  
+  // Position rulers at the edge of jodit content
+  var rulerHeight = 18;
+  var rulerWidth = 25;
+  
+  // Position corner
+  if (rulerCorner) {
+    rulerCorner.style.left = (offsetLeft - rulerWidth) + 'px';
+    rulerCorner.style.top = (offsetTop - rulerHeight) + 'px';
+  }
+  
+  // Position horizontal ruler
+  if (rulerH) {
+    rulerH.style.left = offsetLeft + 'px';
+    rulerH.style.top = (offsetTop - rulerHeight) + 'px';
+    rulerH.style.width = joditArea.offsetWidth + 'px';
+  }
+  
+  // Position vertical ruler
+  if (rulerV) {
+    rulerV.style.left = (offsetLeft - rulerWidth) + 'px';
+    rulerV.style.top = offsetTop + 'px';
+    rulerV.style.height = joditArea.offsetHeight + 'px';
+  }
   
   // 1cm = 37.8px at 96dpi
   var cmToPx = 37.8;
   
-  // Get the padding of jodit-wysiwyg (40px top, 60px left for A4)
-  // Horizontal ruler starts at top of jodit content
-  var paddingLeft = 60;
-  var paddingTop = 20; // Adjusted for ruler-h height
-  
-  // Horizontal ruler (21cm for A4 width = 210mm)
-  // Start from the content area (after padding)
+  // Horizontal ruler marks (21cm for A4 width)
   var hHtml = '';
   for (var i = 0; i <= 21; i++) {
-    var pos = paddingLeft + (i * cmToPx);
-    hHtml += '<div class="ruler-mark" style="left: ' + pos + 'px;">' + i + '</div>';
+    var pos = i * cmToPx;
+    var majorClass = (i % 5 === 0) ? ' major' : '';
+    hHtml += '<div class="ruler-mark' + majorClass + '" style="left: ' + pos + 'px;">' + i + '</div>';
   }
   rulerHMarks.innerHTML = hHtml;
   
-  // Vertical ruler - set height based on jodit content
-  var contentHeight = joditArea ? joditArea.offsetHeight : 1123;
-  if (rulerV) rulerV.style.height = contentHeight + 'px';
-  
-  // Vertical ruler (30cm to cover A4 height of 29.7cm)
+  // Vertical ruler marks (30cm for A4 height)
   var vHtml = '';
   for (var i = 0; i <= 30; i++) {
-    var pos = paddingTop + (i * cmToPx);
-    vHtml += '<div class="ruler-mark" style="top: ' + pos + 'px;">' + i + '</div>';
+    var pos = i * cmToPx;
+    var majorClass = (i % 5 === 0) ? ' major' : '';
+    vHtml += '<div class="ruler-mark' + majorClass + '" style="top: ' + pos + 'px;">' + i + '</div>';
   }
   rulerVMarks.innerHTML = vHtml;
 }

@@ -4591,17 +4591,23 @@ function generateRulerMarks() {
   var rulerHMarks = document.getElementById('ruler-h-marks');
   var rulerVMarks = document.getElementById('ruler-v-marks');
   var wrapper = document.getElementById('editor-page-wrapper');
-  var editorWrapper = wrapper.querySelector('.editor-wrapper');
   
-  if (!editorWrapper) return;
+  // Find the actual editable area (jodit-wysiwyg)
+  var joditArea = wrapper.querySelector('.jodit-wysiwyg');
+  if (!joditArea) {
+    // Fallback to editor-wrapper if jodit not yet initialized
+    joditArea = wrapper.querySelector('.editor-wrapper');
+  }
+  if (!joditArea) return;
   
-  // Get dimensions
+  // Get positions
   var wrapperRect = wrapper.getBoundingClientRect();
-  var editorRect = editorWrapper.getBoundingClientRect();
+  var pageRect = joditArea.getBoundingClientRect();
   
-  // Calculate offset for ruler marks to align with editor
-  var offsetX = editorRect.left - wrapperRect.left - 30; // 30 = ruler-v width
-  var offsetY = editorRect.top - wrapperRect.top - 20; // 20 = ruler-h height
+  // Calculate offset: where the page content starts relative to the ruler
+  // The ruler-h starts at left: 30px, ruler-v starts at top: 20px
+  var offsetX = pageRect.left - wrapperRect.left - 30;
+  var offsetY = pageRect.top - wrapperRect.top - 20;
   
   // 1cm = 37.8px at 96dpi
   var cmToPx = 37.8;
@@ -4610,9 +4616,7 @@ function generateRulerMarks() {
   var hHtml = '';
   for (var i = 0; i <= 21; i++) {
     var pos = offsetX + (i * cmToPx);
-    if (pos >= 0) {
-      hHtml += '<div class="ruler-mark" style="left: ' + pos + 'px;">' + i + '</div>';
-    }
+    hHtml += '<div class="ruler-mark" style="left: ' + pos + 'px;">' + i + '</div>';
   }
   rulerHMarks.innerHTML = hHtml;
   
@@ -4620,9 +4624,7 @@ function generateRulerMarks() {
   var vHtml = '';
   for (var i = 0; i <= 30; i++) {
     var pos = offsetY + (i * cmToPx);
-    if (pos >= 0) {
-      vHtml += '<div class="ruler-mark" style="top: ' + pos + 'px;">' + i + '</div>';
-    }
+    vHtml += '<div class="ruler-mark" style="top: ' + pos + 'px;">' + i + '</div>';
   }
   rulerVMarks.innerHTML = vHtml;
 }

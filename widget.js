@@ -2008,6 +2008,8 @@ function initEditor() {
               </select>\
               <div style="margin-top:12px;font-weight:500;">' + (currentLang === 'fr' ? 'Épaisseur' : 'Thickness') + '</div>\
               <select id="cell-border-width" style="width:100%;padding:8px;border:1px solid #e2e8f0;border-radius:4px;">\
+                <option value="0.5px" ' + (currentWidth === '0.5px' ? 'selected' : '') + '>0.5px - ' + (currentLang === 'fr' ? 'Très fin' : 'Hairline') + '</option>\
+                <option value="0.75px" ' + (currentWidth === '0.75px' ? 'selected' : '') + '>0.75px</option>\
                 <option value="1px" ' + (currentWidth === '1px' ? 'selected' : '') + '>1px - ' + (currentLang === 'fr' ? 'Fin' : 'Thin') + '</option>\
                 <option value="2px" ' + (currentWidth === '2px' ? 'selected' : '') + '>2px</option>\
                 <option value="3px" ' + (currentWidth === '3px' ? 'selected' : '') + '>3px - ' + (currentLang === 'fr' ? 'Moyen' : 'Medium') + '</option>\
@@ -2159,6 +2161,8 @@ function initEditor() {
               </select>
               <div style="margin-top:12px;font-weight:500;">${currentLang === 'fr' ? 'Épaisseur' : 'Thickness'}</div>
               <select id="border-width" style="width:100%;padding:8px;border:1px solid #e2e8f0;border-radius:4px;">
+                <option value="0.5px" ${currentWidth === '0.5px' ? 'selected' : ''}>0.5px - ${currentLang === 'fr' ? 'Très fin' : 'Hairline'}</option>
+                <option value="0.75px" ${currentWidth === '0.75px' ? 'selected' : ''}>0.75px</option>
                 <option value="1px" ${currentWidth === '1px' ? 'selected' : ''}>1px - ${currentLang === 'fr' ? 'Fin' : 'Thin'}</option>
                 <option value="2px" ${currentWidth === '2px' ? 'selected' : ''}>2px</option>
                 <option value="3px" ${currentWidth === '3px' ? 'selected' : ''}>3px - ${currentLang === 'fr' ? 'Moyen' : 'Medium'}</option>

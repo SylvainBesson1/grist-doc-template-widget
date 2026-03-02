@@ -4006,12 +4006,6 @@ async function renderHtmlToPdfPages(html, pdf, pageWidth, pageHeight, pageSize) 
       var tableBorder = table.style.border;
       var hasTableBorder = tableBorder && tableBorder !== 'none' && tableBorder !== '';
       
-      // If table has a border, apply it to cells and remove from table
-      // This prevents double borders with border-collapse
-      if (hasTableBorder) {
-        table.style.border = 'none';
-      }
-      
       // Apply cell styles
       var cells = table.querySelectorAll('td, th');
       cells.forEach(function(cell) {
@@ -4022,13 +4016,15 @@ async function renderHtmlToPdfPages(html, pdf, pageWidth, pageHeight, pageSize) 
                         cell.style.borderLeft || 
                         cell.style.borderRight;
         
-        // Only apply default border if no border is set on cell AND no table border
-        if (!hasCellBorder && !hasTableBorder) {
-          cell.style.border = '1px solid #000';
-        } else if (hasTableBorder && !hasCellBorder) {
-          // If table has border but cells don't, apply table border to cells
+        // If table has custom border, apply same border to cells (no default black)
+        if (hasTableBorder && !hasCellBorder) {
           cell.style.border = tableBorder;
+        } else if (!hasCellBorder && !hasTableBorder) {
+          // Only apply default black border if no table border and no cell border
+          cell.style.border = '1px solid #000';
         }
+        // If cell has its own border, keep it as is
+        
         if (!cell.style.padding) {
           cell.style.padding = '4px 8px';
         }

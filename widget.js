@@ -4615,15 +4615,18 @@ function generateRulerMarks() {
   
   // Position rulers at the top-left of the CONTENT area (where text starts)
   // This way 0cm = where the text margin starts
+  // Add 8px gap to ensure visibility on all screens (Mac/PC)
+  var rulerGap = 8;
+  
   if (rulerCorner) {
     rulerCorner.style.left = (offsetLeft - rulerWidth) + 'px';
-    rulerCorner.style.top = (offsetTop - rulerHeight) + 'px';
+    rulerCorner.style.top = (offsetTop - rulerHeight - rulerGap) + 'px';
   }
   
-  // Position horizontal ruler at top of content
+  // Position horizontal ruler at top of content with gap
   if (rulerH) {
     rulerH.style.left = offsetLeft + 'px';
-    rulerH.style.top = (offsetTop - rulerHeight) + 'px';
+    rulerH.style.top = (offsetTop - rulerHeight - rulerGap) + 'px';
     rulerH.style.width = (pageWidth - 120) + 'px'; // 794 - 2*60px padding
   }
   

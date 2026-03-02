@@ -4001,23 +4001,35 @@ async function renderHtmlToPdfPages(html, pdf, pageWidth, pageHeight, pageSize) 
       table.style.borderCollapse = 'collapse';
       table.style.tableLayout = 'auto';
       table.style.pageBreakInside = 'avoid';
+      
+      // Check if table has a custom border
+      var tableBorder = table.style.border;
+      var hasTableBorder = tableBorder && tableBorder !== 'none' && tableBorder !== '';
+      
+      // Apply cell styles
+      var cells = table.querySelectorAll('td, th');
+      cells.forEach(function(cell) {
+        // Check if cell has ANY border style (individual or shorthand)
+        var hasCellBorder = cell.style.border || 
+                        cell.style.borderTop || 
+                        cell.style.borderBottom || 
+                        cell.style.borderLeft || 
+                        cell.style.borderRight;
+        
+        // Only apply default border if no border is set on cell AND no table border
+        if (!hasCellBorder && !hasTableBorder) {
+          cell.style.border = '1px solid #000';
+        } else if (hasTableBorder && !hasCellBorder) {
+          // If table has border but cells don't, inherit table border style
+          cell.style.border = tableBorder;
+        }
+        if (!cell.style.padding) {
+          cell.style.padding = '4px 8px';
+        }
+      });
     });
     var cells = tempDiv.querySelectorAll('td, th');
     cells.forEach(function(cell) {
-      // Check if cell has ANY border style (individual or shorthand)
-      var hasBorder = cell.style.border || 
-                      cell.style.borderTop || 
-                      cell.style.borderBottom || 
-                      cell.style.borderLeft || 
-                      cell.style.borderRight;
-      
-      // Only apply default border if no border is set at all
-      if (!hasBorder) {
-        cell.style.border = '1px solid #000';
-      }
-      if (!cell.style.padding) {
-        cell.style.padding = '4px 8px';
-      }
       
       // Handle vertical text BEFORE rendering - html2canvas doesn't support writing-mode
       var writingMode = cell.style.writingMode;

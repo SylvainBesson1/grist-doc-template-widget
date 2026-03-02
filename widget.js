@@ -4587,18 +4587,18 @@ function generateRulerMarks() {
   var rulerCorner = document.getElementById('ruler-corner');
   var rulerHMarks = document.getElementById('ruler-h-marks');
   var rulerVMarks = document.getElementById('ruler-v-marks');
-  var joditWorkplace = document.querySelector('.jodit-workplace');
+  var joditWysiwyg = document.querySelector('.jodit-wysiwyg');
   
-  if (!rulerHMarks || !rulerVMarks || !joditWorkplace) return;
+  if (!rulerHMarks || !rulerVMarks || !joditWysiwyg) return;
   
-  // Get jodit-workplace (the white page area) position relative to editor-wrapper
+  // Get jodit-wysiwyg (the content area) position relative to editor-wrapper
   var editorWrapper = document.querySelector('.editor-wrapper');
-  var pageRect = joditWorkplace.getBoundingClientRect();
+  var contentRect = joditWysiwyg.getBoundingClientRect();
   var wrapperRect = editorWrapper.getBoundingClientRect();
   
-  // Calculate offsets (where the page starts)
-  var offsetLeft = pageRect.left - wrapperRect.left;
-  var offsetTop = pageRect.top - wrapperRect.top;
+  // Calculate offsets (where the content starts - this includes the 60px padding)
+  var offsetLeft = contentRect.left - wrapperRect.left;
+  var offsetTop = contentRect.top - wrapperRect.top;
   
   // Position rulers at the edge of the page
   var rulerHeight = 18;
@@ -4606,25 +4606,29 @@ function generateRulerMarks() {
   
   // A4 dimensions: 210mm x 297mm = 794px x 1123px at 96dpi
   var pageWidth = 794;
-  var pageHeight = joditWorkplace.offsetHeight || 1123;
+  var pageHeight = joditWysiwyg.offsetHeight || 1123;
   
-  // Position corner just above the page
+  // Position corner just above the page (not the content)
+  // The page starts at offsetLeft - 60px (padding) and offsetTop - 40px (padding)
+  var pageLeft = offsetLeft - 60; // Remove left padding
+  var pageTop = offsetTop - 40;   // Remove top padding
+  
   if (rulerCorner) {
-    rulerCorner.style.left = (offsetLeft - rulerWidth) + 'px';
-    rulerCorner.style.top = (offsetTop - rulerHeight) + 'px';
+    rulerCorner.style.left = (pageLeft - rulerWidth) + 'px';
+    rulerCorner.style.top = (pageTop - rulerHeight) + 'px';
   }
   
   // Position horizontal ruler just above the page
   if (rulerH) {
-    rulerH.style.left = offsetLeft + 'px';
-    rulerH.style.top = (offsetTop - rulerHeight) + 'px';
+    rulerH.style.left = pageLeft + 'px';
+    rulerH.style.top = (pageTop - rulerHeight) + 'px';
     rulerH.style.width = pageWidth + 'px';
   }
   
   // Position vertical ruler at the left of the page
   if (rulerV) {
-    rulerV.style.left = (offsetLeft - rulerWidth) + 'px';
-    rulerV.style.top = offsetTop + 'px';
+    rulerV.style.left = (pageLeft - rulerWidth) + 'px';
+    rulerV.style.top = pageTop + 'px';
     rulerV.style.height = pageHeight + 'px';
   }
   

@@ -274,6 +274,16 @@ if (!isInsideGrist()) {
       // Initialize editor FIRST so it's ready when we load templates
       initEditor();
       
+      // Move Jodit toolbar to separate container (outside the page)
+      setTimeout(function() {
+        var toolbar = document.querySelector('.jodit-toolbar__box');
+        var toolbarContainer = document.getElementById('jodit-toolbar-container');
+        if (toolbar && toolbarContainer) {
+          toolbarContainer.appendChild(toolbar);
+          console.log('Jodit toolbar moved to separate container');
+        }
+      }, 200);
+      
       // Show fixed bars for editor tab (default tab)
       var fixedVarBar = document.getElementById('fixed-var-bar');
       var fixedBottomBar = document.querySelector('.fixed-bottom-bar');
@@ -1615,7 +1625,7 @@ function initEditor() {
     placeholder: currentLang === 'fr' ? 'Commencez à écrire votre document ici...' : 'Start writing your document here...',
     allowResizeY: true,
     toolbarAdaptive: false,
-    toolbarContainer: '#jodit-toolbar-container',
+    // toolbar will be moved to #jodit-toolbar-container after init
     askBeforePasteHTML: false,
     askBeforePasteFromWord: false,
     defaultActionOnPaste: 'insert_clear_html',

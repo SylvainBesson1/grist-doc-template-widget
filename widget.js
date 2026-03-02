@@ -4587,22 +4587,26 @@ function generateRulerMarks() {
   var rulerCorner = document.getElementById('ruler-corner');
   var rulerHMarks = document.getElementById('ruler-h-marks');
   var rulerVMarks = document.getElementById('ruler-v-marks');
-  var joditArea = document.querySelector('.jodit-wysiwyg');
+  var joditWorkplace = document.querySelector('.jodit-workplace');
   
-  if (!rulerHMarks || !rulerVMarks || !joditArea) return;
+  if (!rulerHMarks || !rulerVMarks || !joditWorkplace) return;
   
-  // Get jodit-wysiwyg position relative to editor-wrapper
+  // Get jodit-workplace (the white page area) position relative to editor-wrapper
   var editorWrapper = document.querySelector('.editor-wrapper');
-  var joditRect = joditArea.getBoundingClientRect();
+  var pageRect = joditWorkplace.getBoundingClientRect();
   var wrapperRect = editorWrapper.getBoundingClientRect();
   
-  // Calculate offsets (where jodit content starts)
-  var offsetLeft = joditRect.left - wrapperRect.left;
-  var offsetTop = joditRect.top - wrapperRect.top;
+  // Calculate offsets (where the page starts)
+  var offsetLeft = pageRect.left - wrapperRect.left;
+  var offsetTop = pageRect.top - wrapperRect.top;
   
-  // Position rulers at the edge of jodit content
+  // Position rulers at the edge of the page
   var rulerHeight = 18;
   var rulerWidth = 25;
+  
+  // A4 dimensions: 210mm x 297mm = 794px x 1123px at 96dpi
+  var pageWidth = 794;
+  var pageHeight = joditWorkplace.offsetHeight || 1123;
   
   // Position corner
   if (rulerCorner) {
@@ -4610,18 +4614,18 @@ function generateRulerMarks() {
     rulerCorner.style.top = (offsetTop - rulerHeight) + 'px';
   }
   
-  // Position horizontal ruler
+  // Position horizontal ruler (full page width)
   if (rulerH) {
     rulerH.style.left = offsetLeft + 'px';
     rulerH.style.top = (offsetTop - rulerHeight) + 'px';
-    rulerH.style.width = joditArea.offsetWidth + 'px';
+    rulerH.style.width = pageWidth + 'px';
   }
   
-  // Position vertical ruler
+  // Position vertical ruler (full page height)
   if (rulerV) {
     rulerV.style.left = (offsetLeft - rulerWidth) + 'px';
     rulerV.style.top = offsetTop + 'px';
-    rulerV.style.height = joditArea.offsetHeight + 'px';
+    rulerV.style.height = pageHeight + 'px';
   }
   
   // 1cm = 37.8px at 96dpi

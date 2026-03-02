@@ -4006,6 +4006,12 @@ async function renderHtmlToPdfPages(html, pdf, pageWidth, pageHeight, pageSize) 
       var tableBorder = table.style.border;
       var hasTableBorder = tableBorder && tableBorder !== 'none' && tableBorder !== '';
       
+      // If table has a border, apply it to cells and remove from table
+      // This prevents double borders with border-collapse
+      if (hasTableBorder) {
+        table.style.border = 'none';
+      }
+      
       // Apply cell styles
       var cells = table.querySelectorAll('td, th');
       cells.forEach(function(cell) {
@@ -4020,7 +4026,7 @@ async function renderHtmlToPdfPages(html, pdf, pageWidth, pageHeight, pageSize) 
         if (!hasCellBorder && !hasTableBorder) {
           cell.style.border = '1px solid #000';
         } else if (hasTableBorder && !hasCellBorder) {
-          // If table has border but cells don't, inherit table border style
+          // If table has border but cells don't, apply table border to cells
           cell.style.border = tableBorder;
         }
         if (!cell.style.padding) {

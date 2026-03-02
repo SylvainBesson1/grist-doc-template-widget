@@ -4608,17 +4608,16 @@ function generateRulerMarks() {
   var pageWidth = 794;
   var pageHeight = joditWorkplace.offsetHeight || 1123;
   
-  // Position corner (with same gap as horizontal ruler)
+  // Position corner
   if (rulerCorner) {
     rulerCorner.style.left = (offsetLeft - rulerWidth) + 'px';
-    rulerCorner.style.top = (offsetTop - rulerHeight - 5) + 'px';
+    rulerCorner.style.top = (offsetTop - rulerHeight) + 'px';
   }
   
   // Position horizontal ruler (full page width)
-  // Add 5px gap between toolbar and ruler
   if (rulerH) {
     rulerH.style.left = offsetLeft + 'px';
-    rulerH.style.top = (offsetTop - rulerHeight - 5) + 'px';
+    rulerH.style.top = (offsetTop - rulerHeight) + 'px';
     rulerH.style.width = pageWidth + 'px';
   }
   

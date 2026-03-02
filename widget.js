@@ -1968,17 +1968,24 @@ function initEditor() {
           }
           
           // Parse current border style
-          var currentBorder = cell.style.border || '1px solid #000';
+          var currentBorder = cell.style.border || cell.style.borderTop || '1px solid #000';
           var isInvisible = currentBorder.includes('transparent') || currentBorder === 'none' || currentBorder === '';
           var currentColor = '#000000';
           var currentWidth = '1px';
+          var currentStyle = 'solid';
           var colorMatch = currentBorder.match(/#[0-9a-fA-F]{6}|#[0-9a-fA-F]{3}|rgb\([^)]+\)/);
           if (colorMatch) currentColor = colorMatch[0];
           var widthMatch = currentBorder.match(/(\d+)px/);
           if (widthMatch) currentWidth = widthMatch[1] + 'px';
+          // Detect border style
+          if (currentBorder.includes('dashed')) currentStyle = 'dashed';
+          else if (currentBorder.includes('dotted')) currentStyle = 'dotted';
+          else if (currentBorder.includes('double')) currentStyle = 'double';
+          else if (currentBorder.includes('groove')) currentStyle = 'groove';
+          else if (currentBorder.includes('ridge')) currentStyle = 'ridge';
           
           var dialog = document.createElement('div');
-          dialog.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:white;padding:20px;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.3);z-index:10000;min-width:300px;';
+          dialog.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:white;padding:20px;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.3);z-index:10000;min-width:320px;';
           dialog.innerHTML = '\
             <h3 style="margin:0 0 15px 0;font-size:1.1em;">' + (currentLang === 'fr' ? 'Bordures de la cellule' : 'Cell Borders') + '</h3>\
             <div style="margin-bottom:12px;">\
@@ -1990,19 +1997,34 @@ function initEditor() {
             <div id="cell-border-options" style="' + (isInvisible ? 'opacity:0.5;pointer-events:none;' : '') + '">\
               <div style="margin-bottom:8px;font-weight:500;">' + (currentLang === 'fr' ? 'Couleur' : 'Color') + '</div>\
               <input type="color" id="cell-border-color" value="' + currentColor + '" style="width:100%;height:36px;border:1px solid #e2e8f0;border-radius:4px;cursor:pointer;">\
-              <div style="margin-top:8px;font-weight:500;">' + (currentLang === 'fr' ? 'Épaisseur' : 'Thickness') + '</div>\
-              <select id="cell-border-width" style="width:100%;padding:8px;border:1px solid #e2e8f0;border-radius:4px;">\
-                <option value="1px" ' + (currentWidth === '1px' ? 'selected' : '') + '>1px</option>\
-                <option value="2px" ' + (currentWidth === '2px' ? 'selected' : '') + '>2px</option>\
-                <option value="3px" ' + (currentWidth === '3px' ? 'selected' : '') + '>3px</option>\
-                <option value="4px" ' + (currentWidth === '4px' ? 'selected' : '') + '>4px</option>\
+              <div style="margin-top:12px;font-weight:500;">' + (currentLang === 'fr' ? 'Type de filet' : 'Line style') + '</div>\
+              <select id="cell-border-style" style="width:100%;padding:8px;border:1px solid #e2e8f0;border-radius:4px;">\
+                <option value="solid" ' + (currentStyle === 'solid' ? 'selected' : '') + '>' + (currentLang === 'fr' ? '━━━ Plein' : '━━━ Solid') + '</option>\
+                <option value="dashed" ' + (currentStyle === 'dashed' ? 'selected' : '') + '>' + (currentLang === 'fr' ? '┅┅┅ Tirets' : '┅┅┅ Dashed') + '</option>\
+                <option value="dotted" ' + (currentStyle === 'dotted' ? 'selected' : '') + '>' + (currentLang === 'fr' ? '┈┈┈ Pointillé' : '┈┈┈ Dotted') + '</option>\
+                <option value="double" ' + (currentStyle === 'double' ? 'selected' : '') + '>' + (currentLang === 'fr' ? '═══ Double' : '═══ Double') + '</option>\
+                <option value="groove" ' + (currentStyle === 'groove' ? 'selected' : '') + '>' + (currentLang === 'fr' ? '▤▤▤ Rainure' : '▤▤▤ Groove') + '</option>\
+                <option value="ridge" ' + (currentStyle === 'ridge' ? 'selected' : '') + '>' + (currentLang === 'fr' ? '▥▥▥ Crête' : '▥▥▥ Ridge') + '</option>\
               </select>\
-              <div style="margin-top:8px;font-weight:500;">' + (currentLang === 'fr' ? 'Côtés' : 'Sides') + '</div>\
+              <div style="margin-top:12px;font-weight:500;">' + (currentLang === 'fr' ? 'Épaisseur' : 'Thickness') + '</div>\
+              <select id="cell-border-width" style="width:100%;padding:8px;border:1px solid #e2e8f0;border-radius:4px;">\
+                <option value="1px" ' + (currentWidth === '1px' ? 'selected' : '') + '>1px - ' + (currentLang === 'fr' ? 'Fin' : 'Thin') + '</option>\
+                <option value="2px" ' + (currentWidth === '2px' ? 'selected' : '') + '>2px</option>\
+                <option value="3px" ' + (currentWidth === '3px' ? 'selected' : '') + '>3px - ' + (currentLang === 'fr' ? 'Moyen' : 'Medium') + '</option>\
+                <option value="4px" ' + (currentWidth === '4px' ? 'selected' : '') + '>4px</option>\
+                <option value="5px" ' + (currentWidth === '5px' ? 'selected' : '') + '>5px - ' + (currentLang === 'fr' ? 'Épais' : 'Thick') + '</option>\
+                <option value="6px" ' + (currentWidth === '6px' ? 'selected' : '') + '>6px</option>\
+              </select>\
+              <div style="margin-top:12px;font-weight:500;">' + (currentLang === 'fr' ? 'Côtés' : 'Sides') + '</div>\
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:4px;">\
                 <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="cell-border-top" checked> ' + (currentLang === 'fr' ? 'Haut' : 'Top') + '</label>\
                 <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="cell-border-bottom" checked> ' + (currentLang === 'fr' ? 'Bas' : 'Bottom') + '</label>\
                 <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="cell-border-left" checked> ' + (currentLang === 'fr' ? 'Gauche' : 'Left') + '</label>\
                 <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="cell-border-right" checked> ' + (currentLang === 'fr' ? 'Droite' : 'Right') + '</label>\
+              </div>\
+              <div style="margin-top:12px;padding:10px;background:#f8fafc;border-radius:6px;border:1px solid #e2e8f0;">\
+                <div style="font-weight:500;margin-bottom:6px;font-size:0.9em;">' + (currentLang === 'fr' ? 'Aperçu' : 'Preview') + '</div>\
+                <div id="cell-border-preview" style="width:100%;height:40px;background:white;border:2px solid #000;"></div>\
               </div>\
             </div>\
             <div style="display:flex;gap:10px;margin-top:15px;">\
@@ -2025,22 +2047,38 @@ function initEditor() {
             optionsGroup.style.pointerEvents = this.checked ? 'none' : 'auto';
           });
           
+          // Update preview on change
+          function updatePreview() {
+            var preview = dialog.querySelector('#cell-border-preview');
+            if (preview) {
+              var c = dialog.querySelector('#cell-border-color').value;
+              var w = dialog.querySelector('#cell-border-width').value;
+              var s = dialog.querySelector('#cell-border-style').value;
+              preview.style.border = w + ' ' + s + ' ' + c;
+            }
+          }
+          dialog.querySelector('#cell-border-color').addEventListener('input', updatePreview);
+          dialog.querySelector('#cell-border-width').addEventListener('change', updatePreview);
+          dialog.querySelector('#cell-border-style').addEventListener('change', updatePreview);
+          updatePreview();
+          
           dialog.querySelector('#cell-border-apply').addEventListener('click', function() {
             var invisible = invisibleCheck.checked;
             var color = dialog.querySelector('#cell-border-color').value;
             var width = dialog.querySelector('#cell-border-width').value;
+            var style = dialog.querySelector('#cell-border-style').value;
             var top = dialog.querySelector('#cell-border-top').checked;
             var bottom = dialog.querySelector('#cell-border-bottom').checked;
             var left = dialog.querySelector('#cell-border-left').checked;
             var right = dialog.querySelector('#cell-border-right').checked;
             
-            var borderStyle = invisible ? 'none' : width + ' solid ' + color;
+            var borderValue = invisible ? 'none' : width + ' ' + style + ' ' + color;
             var noBorder = 'none';
             
-            cell.style.borderTop = top ? borderStyle : noBorder;
-            cell.style.borderBottom = bottom ? borderStyle : noBorder;
-            cell.style.borderLeft = left ? borderStyle : noBorder;
-            cell.style.borderRight = right ? borderStyle : noBorder;
+            cell.style.borderTop = top ? borderValue : noBorder;
+            cell.style.borderBottom = bottom ? borderValue : noBorder;
+            cell.style.borderLeft = left ? borderValue : noBorder;
+            cell.style.borderRight = right ? borderValue : noBorder;
             
             document.body.removeChild(dialog);
             document.body.removeChild(overlay);
@@ -2084,9 +2122,21 @@ function initEditor() {
           // Show border options dialog
           var currentBorder = table.style.border || '1px solid #000';
           var isInvisible = currentBorder.includes('transparent') || currentBorder === 'none' || currentBorder === '';
+          var currentColor = '#000000';
+          var currentWidth = '1px';
+          var currentStyle = 'solid';
+          var colorMatch = currentBorder.match(/#[0-9a-fA-F]{6}|#[0-9a-fA-F]{3}|rgb\([^)]+\)/);
+          if (colorMatch) currentColor = colorMatch[0];
+          var widthMatch = currentBorder.match(/(\d+)px/);
+          if (widthMatch) currentWidth = widthMatch[1] + 'px';
+          if (currentBorder.includes('dashed')) currentStyle = 'dashed';
+          else if (currentBorder.includes('dotted')) currentStyle = 'dotted';
+          else if (currentBorder.includes('double')) currentStyle = 'double';
+          else if (currentBorder.includes('groove')) currentStyle = 'groove';
+          else if (currentBorder.includes('ridge')) currentStyle = 'ridge';
           
           var dialog = document.createElement('div');
-          dialog.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:white;padding:20px;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.3);z-index:10000;min-width:280px;';
+          dialog.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:white;padding:20px;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.3);z-index:10000;min-width:320px;';
           dialog.innerHTML = `
             <h3 style="margin:0 0 15px 0;font-size:1.1em;">${currentLang === 'fr' ? 'Bordures du tableau' : 'Table Borders'}</h3>
             <div style="margin-bottom:12px;">
@@ -2097,13 +2147,29 @@ function initEditor() {
             </div>
             <div id="border-color-group" style="${isInvisible ? 'opacity:0.5;pointer-events:none;' : ''}">
               <div style="margin-bottom:8px;font-weight:500;">${currentLang === 'fr' ? 'Couleur des bordures' : 'Border color'}</div>
-              <input type="color" id="border-color" value="#000000" style="width:100%;height:36px;border:1px solid #e2e8f0;border-radius:4px;cursor:pointer;">
-              <div style="margin-top:8px;font-weight:500;">${currentLang === 'fr' ? 'Épaisseur' : 'Thickness'}</div>
-              <select id="border-width" style="width:100%;padding:8px;border:1px solid #e2e8f0;border-radius:4px;">
-                <option value="1px">1px</option>
-                <option value="2px">2px</option>
-                <option value="3px">3px</option>
+              <input type="color" id="border-color" value="${currentColor}" style="width:100%;height:36px;border:1px solid #e2e8f0;border-radius:4px;cursor:pointer;">
+              <div style="margin-top:12px;font-weight:500;">${currentLang === 'fr' ? 'Type de filet' : 'Line style'}</div>
+              <select id="border-style" style="width:100%;padding:8px;border:1px solid #e2e8f0;border-radius:4px;">
+                <option value="solid" ${currentStyle === 'solid' ? 'selected' : ''}>${currentLang === 'fr' ? '━━━ Plein' : '━━━ Solid'}</option>
+                <option value="dashed" ${currentStyle === 'dashed' ? 'selected' : ''}>${currentLang === 'fr' ? '┅┅┅ Tirets' : '┅┅┅ Dashed'}</option>
+                <option value="dotted" ${currentStyle === 'dotted' ? 'selected' : ''}>${currentLang === 'fr' ? '┈┈┈ Pointillé' : '┈┈┈ Dotted'}</option>
+                <option value="double" ${currentStyle === 'double' ? 'selected' : ''}>${currentLang === 'fr' ? '═══ Double' : '═══ Double'}</option>
+                <option value="groove" ${currentStyle === 'groove' ? 'selected' : ''}>${currentLang === 'fr' ? '▤▤▤ Rainure' : '▤▤▤ Groove'}</option>
+                <option value="ridge" ${currentStyle === 'ridge' ? 'selected' : ''}>${currentLang === 'fr' ? '▥▥▥ Crête' : '▥▥▥ Ridge'}</option>
               </select>
+              <div style="margin-top:12px;font-weight:500;">${currentLang === 'fr' ? 'Épaisseur' : 'Thickness'}</div>
+              <select id="border-width" style="width:100%;padding:8px;border:1px solid #e2e8f0;border-radius:4px;">
+                <option value="1px" ${currentWidth === '1px' ? 'selected' : ''}>1px - ${currentLang === 'fr' ? 'Fin' : 'Thin'}</option>
+                <option value="2px" ${currentWidth === '2px' ? 'selected' : ''}>2px</option>
+                <option value="3px" ${currentWidth === '3px' ? 'selected' : ''}>3px - ${currentLang === 'fr' ? 'Moyen' : 'Medium'}</option>
+                <option value="4px" ${currentWidth === '4px' ? 'selected' : ''}>4px</option>
+                <option value="5px" ${currentWidth === '5px' ? 'selected' : ''}>5px - ${currentLang === 'fr' ? 'Épais' : 'Thick'}</option>
+                <option value="6px" ${currentWidth === '6px' ? 'selected' : ''}>6px</option>
+              </select>
+              <div style="margin-top:12px;padding:10px;background:#f8fafc;border-radius:6px;border:1px solid #e2e8f0;">
+                <div style="font-weight:500;margin-bottom:6px;font-size:0.9em;">${currentLang === 'fr' ? 'Aperçu' : 'Preview'}</div>
+                <div id="border-preview" style="width:100%;height:40px;background:white;border:2px solid #000;"></div>
+              </div>
             </div>
             <div style="display:flex;gap:10px;margin-top:15px;">
               <button id="border-apply" style="flex:1;padding:10px;background:#3b82f6;color:white;border:none;border-radius:6px;cursor:pointer;">${currentLang === 'fr' ? 'Appliquer' : 'Apply'}</button>
@@ -2125,21 +2191,37 @@ function initEditor() {
             colorGroup.style.pointerEvents = this.checked ? 'none' : 'auto';
           });
           
+          // Update preview on change
+          function updateTablePreview() {
+            var preview = dialog.querySelector('#border-preview');
+            if (preview) {
+              var c = dialog.querySelector('#border-color').value;
+              var w = dialog.querySelector('#border-width').value;
+              var s = dialog.querySelector('#border-style').value;
+              preview.style.border = w + ' ' + s + ' ' + c;
+            }
+          }
+          dialog.querySelector('#border-color').addEventListener('input', updateTablePreview);
+          dialog.querySelector('#border-width').addEventListener('change', updateTablePreview);
+          dialog.querySelector('#border-style').addEventListener('change', updateTablePreview);
+          updateTablePreview();
+          
           dialog.querySelector('#border-apply').addEventListener('click', function() {
             var invisible = invisibleCheck.checked;
             var color = dialog.querySelector('#border-color').value;
             var width = dialog.querySelector('#border-width').value;
+            var style = dialog.querySelector('#border-style').value;
             
-            var borderStyle = invisible ? 'none' : width + ' solid ' + color;
+            var borderValue = invisible ? 'none' : width + ' ' + style + ' ' + color;
             
             // Apply to table
-            table.style.border = borderStyle;
+            table.style.border = borderValue;
             table.style.borderCollapse = 'collapse';
             
             // Apply to all cells
             var cells = table.querySelectorAll('td, th');
             cells.forEach(function(cell) {
-              cell.style.border = borderStyle;
+              cell.style.border = borderValue;
             });
             
             document.body.removeChild(dialog);

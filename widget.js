@@ -4588,13 +4588,9 @@ function generateRulerMarks() {
   if (!rulerHMarks || !rulerVMarks) return;
   
   // A4 = 210mm x 297mm
-  // At 96dpi: 1mm = 3.7795px, 1cm = 37.795px
-  // The editor-wrapper width IS the page (794px = 210mm)
-  // So the ruler should scale: ruler pixel width / A4 cm width
-  // ruler-h takes the full width of column 2 in the grid = editor-wrapper width
-  var editorWrapper = document.querySelector('.editor-wrapper');
-  var rulerWidth = editorWrapper ? editorWrapper.offsetWidth : 794;
-  var pxPerCm = rulerWidth / 21.0; // Scale to fit exactly 21cm
+  // Grid column 2 is fixed at 794px = 21cm
+  var pageWidthPx = 794;
+  var pxPerCm = pageWidthPx / 21.0; // 37.81px per cm
   
   // Horizontal ruler marks (0 to 21 cm)
   var hHtml = '';
@@ -4605,9 +4601,9 @@ function generateRulerMarks() {
   }
   rulerHMarks.innerHTML = hHtml;
   
-  // Vertical ruler: height of the page
-  var pageHeight = editorWrapper ? editorWrapper.offsetHeight : 1123;
-  var vPxPerCm = pageHeight / 29.7; // Scale to fit 29.7cm
+  // Vertical ruler: A4 height = 1123px = 29.7cm
+  var pageHeightPx = 1123;
+  var vPxPerCm = pageHeightPx / 29.7; // 37.81px per cm
   
   var vHtml = '';
   for (var i = 0; i <= 30; i++) {

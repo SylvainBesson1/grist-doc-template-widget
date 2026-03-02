@@ -4155,11 +4155,16 @@ async function renderHtmlToPdfPages(html, pdf, pageWidth, pageHeight, pageSize) 
           row.style.display = 'table-row';
           row.style.visibility = 'visible';
         });
-        // Ensure all cells have proper borders and are visible
+        // Ensure all cells are visible (preserve existing borders)
         var clonedCells = clonedElement.querySelectorAll('td, th');
         clonedCells.forEach(function(cell) {
-          cell.style.border = '1px solid #000';
-          cell.style.padding = '4px 8px';
+          // Only set border if none exists
+          if (!cell.style.border && !cell.style.borderTop && !cell.style.borderBottom && !cell.style.borderLeft && !cell.style.borderRight) {
+            cell.style.border = '1px solid #000';
+          }
+          if (!cell.style.padding) {
+            cell.style.padding = '4px 8px';
+          }
           cell.style.display = 'table-cell';
           cell.style.visibility = 'visible';
           

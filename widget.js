@@ -4405,15 +4405,24 @@ function initStickyToolbar() {
     var toolbar = document.querySelector('.jodit-toolbar__box');
     if (!toolbar) return;
     
-    // Get the variables bar position to know where to fix the toolbar
-    var varsBar = document.querySelector('.variables-bar');
+    // Get header elements to calculate fixed position
+    var header = document.querySelector('.header');
+    var tabs = document.querySelector('.tabs');
     var toolbarHeight = toolbar.offsetHeight;
+    
+    // Calculate the fixed top position (header + tabs height)
+    var fixedTop = 0;
+    if (header) fixedTop += header.offsetHeight;
+    if (tabs) fixedTop += tabs.offsetHeight;
     
     // Create placeholder to prevent content jump
     var placeholder = document.createElement('div');
     placeholder.className = 'toolbar-placeholder';
     placeholder.style.height = toolbarHeight + 'px';
     toolbar.parentNode.insertBefore(placeholder, toolbar);
+    
+    // Store initial toolbar position
+    var initialToolbarTop = toolbar.getBoundingClientRect().top + window.scrollY;
     
     function handleScroll() {
       var editorTab = document.querySelector('[data-tab="editor"]');
@@ -4425,19 +4434,17 @@ function initStickyToolbar() {
         return;
       }
       
-      // Calculate the trigger point - when toolbar would go above the variables bar
-      var varsBarBottom = varsBar ? varsBar.getBoundingClientRect().bottom : 125;
-      var toolbarRect = placeholder.classList.contains('active') 
-        ? placeholder.getBoundingClientRect() 
-        : toolbar.getBoundingClientRect();
+      // Check if we've scrolled past the toolbar's original position
+      var scrollY = window.scrollY;
+      var triggerPoint = initialToolbarTop - fixedTop;
       
-      if (toolbarRect.top < varsBarBottom) {
+      if (scrollY > triggerPoint) {
         toolbar.classList.add('toolbar-fixed');
+        toolbar.style.top = fixedTop + 'px';
         placeholder.classList.add('active');
-        // Update CSS variable for top position
-        toolbar.style.top = varsBarBottom + 'px';
       } else {
         toolbar.classList.remove('toolbar-fixed');
+        toolbar.style.top = '';
         placeholder.classList.remove('active');
       }
     }

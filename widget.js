@@ -4664,13 +4664,17 @@ function togglePreviewRulers() {
   var rulerV = document.getElementById('preview-ruler-v');
   var rulerCorner = document.getElementById('preview-ruler-corner');
   
+  console.log('togglePreviewRulers:', showPreviewRulers, rulerH, rulerV, rulerCorner);
+  
   if (btn) btn.classList.toggle('active', showPreviewRulers);
-  if (rulerH) rulerH.style.display = showPreviewRulers ? 'block' : 'none';
-  if (rulerV) rulerV.style.display = showPreviewRulers ? 'block' : 'none';
-  if (rulerCorner) rulerCorner.style.display = showPreviewRulers ? 'block' : 'none';
+  
+  var disp = showPreviewRulers ? 'block' : 'none';
+  if (rulerH) { rulerH.style.display = disp; rulerH.style.position = 'absolute'; rulerH.style.zIndex = '100'; }
+  if (rulerV) { rulerV.style.display = disp; rulerV.style.position = 'absolute'; rulerV.style.zIndex = '100'; }
+  if (rulerCorner) { rulerCorner.style.display = disp; rulerCorner.style.position = 'absolute'; rulerCorner.style.zIndex = '100'; }
   
   if (showPreviewRulers) {
-    positionPreviewRulers();
+    setTimeout(positionPreviewRulers, 100);
   }
 }
 
@@ -4683,16 +4687,23 @@ function positionPreviewRulers() {
   var previewPage = document.querySelector('#preview-pages-wrapper .preview-page');
   var wrapper = document.getElementById('preview-pages-wrapper');
   
-  if (!rulerH || !rulerV || !rulerCorner || !previewPage || !wrapper) return;
+  console.log('positionPreviewRulers - page:', previewPage, 'wrapper:', wrapper);
+  if (!rulerH || !rulerV || !rulerCorner || !previewPage || !wrapper) {
+    console.log('Missing elements:', !rulerH, !rulerV, !rulerCorner, !previewPage, !wrapper);
+    return;
+  }
   
   // Get preview-page position relative to wrapper
   var pageRect = previewPage.getBoundingClientRect();
   var wrapperRect = wrapper.getBoundingClientRect();
   
-  var pageLeft = pageRect.left - wrapperRect.left;
-  var pageTop = pageRect.top - wrapperRect.top;
+  // Account for wrapper scroll
+  var pageLeft = pageRect.left - wrapperRect.left + wrapper.scrollLeft;
+  var pageTop = pageRect.top - wrapperRect.top + wrapper.scrollTop;
   var pageWidth = previewPage.offsetWidth;
   var pageHeight = previewPage.offsetHeight;
+  
+  console.log('Preview ruler positions - left:', pageLeft, 'top:', pageTop, 'w:', pageWidth, 'h:', pageHeight);
   
   var rulerH_height = 20;
   var rulerV_width = 25;
@@ -4701,15 +4712,18 @@ function positionPreviewRulers() {
   rulerH.style.left = pageLeft + 'px';
   rulerH.style.top = (pageTop - rulerH_height) + 'px';
   rulerH.style.width = pageWidth + 'px';
+  rulerH.style.background = '#f8fafc';
   
   // Place vertical ruler to the left of the preview page
   rulerV.style.left = (pageLeft - rulerV_width) + 'px';
   rulerV.style.top = pageTop + 'px';
   rulerV.style.height = pageHeight + 'px';
+  rulerV.style.background = '#f8fafc';
   
   // Place corner
   rulerCorner.style.left = (pageLeft - rulerV_width) + 'px';
   rulerCorner.style.top = (pageTop - rulerH_height) + 'px';
+  rulerCorner.style.background = '#e2e8f0';
   
   // Generate marks: scale to fit the page
   var pxPerCm = pageWidth / 21.0;

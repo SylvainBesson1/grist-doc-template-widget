@@ -2281,6 +2281,8 @@ function initEditor() {
     }
   });
   
+  // Initialize sticky toolbar after editor is ready
+  setTimeout(initStickyToolbar, 100);
 }
 
 // =============================================================================
@@ -4391,6 +4393,51 @@ function getHelpGuideFR() {
       Vous pouvez aussi utiliser le bouton "Sauvegarder le modèle" pour forcer la sauvegarde.</p>
     </div>
   `;
+}
+
+// =============================================================================
+// STICKY TOOLBAR
+// =============================================================================
+
+function initStickyToolbar() {
+  // Wait for Jodit to be initialized
+  setTimeout(function() {
+    var toolbar = document.querySelector('.jodit-toolbar__box');
+    if (!toolbar) return;
+    
+    var toolbarRect = toolbar.getBoundingClientRect();
+    var toolbarTop = toolbarRect.top + window.scrollY;
+    var toolbarHeight = toolbar.offsetHeight;
+    
+    // Create placeholder to prevent content jump
+    var placeholder = document.createElement('div');
+    placeholder.className = 'toolbar-placeholder';
+    placeholder.style.height = toolbarHeight + 'px';
+    toolbar.parentNode.insertBefore(placeholder, toolbar);
+    
+    function handleScroll() {
+      var scrollY = window.scrollY;
+      var editorTab = document.querySelector('[data-tab="editor"]');
+      var isEditorActive = editorTab && editorTab.classList.contains('active');
+      
+      if (!isEditorActive) {
+        toolbar.classList.remove('toolbar-fixed');
+        placeholder.classList.remove('active');
+        return;
+      }
+      
+      if (scrollY > toolbarTop - 10) {
+        toolbar.classList.add('toolbar-fixed');
+        placeholder.classList.add('active');
+      } else {
+        toolbar.classList.remove('toolbar-fixed');
+        placeholder.classList.remove('active');
+      }
+    }
+    
+    window.addEventListener('scroll', handleScroll);
+    handleScroll(); // Initial check
+  }, 500);
 }
 
 function getHelpGuideEN() {

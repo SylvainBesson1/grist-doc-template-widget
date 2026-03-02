@@ -377,7 +377,7 @@
     .editor-page-with-rulers .ruler-corner,
     .editor-page-with-rulers .ruler-h,
     .editor-page-with-rulers .ruler-v { display: block; }
-    .editor-page-with-rulers .editor-wrapper { grid-column: 2; grid-row: 2; }
+    .editor-page-with-rulers .editor-wrapper { grid-column: 2; grid-row: 2; width: 100%; max-width: 794px; box-sizing: border-box; overflow: hidden; }
     .ruler-marks { position: relative; height: 100%; width: 100%; }
     .ruler-h .ruler-mark { position: absolute; top: 0; height: 100%; border-left: 1px solid #cbd5e1; font-size: 8px; color: #475569; padding-left: 2px; line-height: 20px; }
     .ruler-h .ruler-mark.cm5 { border-left: 1px solid #94a3b8; }
@@ -400,7 +400,7 @@
       border-radius: 8px;
     }
     .editor-page-a4.editor-page-with-rulers {
-      max-width: 825px; /* 794 + 25px ruler + 6px gap */
+      max-width: none !important;
     }
     .editor-page-a4 .editor-wrapper {
       box-shadow: 0 2px 12px rgba(0,0,0,0.12);

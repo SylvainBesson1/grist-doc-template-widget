@@ -4576,11 +4576,11 @@ function toggleRulers() {
   var rulerCorner = document.getElementById('ruler-corner');
   var wrapper = document.getElementById('editor-page-wrapper');
   
-  btn.classList.toggle('active', showRulers);
-  rulerH.classList.toggle('show', showRulers);
-  rulerV.classList.toggle('show', showRulers);
-  rulerCorner.classList.toggle('show', showRulers);
-  wrapper.classList.toggle('editor-page-wrapper-with-rulers', showRulers);
+  if (btn) btn.classList.toggle('active', showRulers);
+  if (rulerH) rulerH.classList.toggle('show', showRulers);
+  if (rulerV) rulerV.classList.toggle('show', showRulers);
+  if (rulerCorner) rulerCorner.classList.toggle('show', showRulers);
+  if (wrapper) wrapper.classList.toggle('editor-page-wrapper-with-rulers', showRulers);
   
   if (showRulers) {
     setTimeout(generateRulerMarks, 100);
@@ -4590,24 +4590,35 @@ function toggleRulers() {
 function generateRulerMarks() {
   var rulerHMarks = document.getElementById('ruler-h-marks');
   var rulerVMarks = document.getElementById('ruler-v-marks');
+  var rulerV = document.getElementById('ruler-v');
+  var joditArea = document.querySelector('.jodit-wysiwyg');
   
   if (!rulerHMarks || !rulerVMarks) return;
   
   // 1cm = 37.8px at 96dpi
   var cmToPx = 37.8;
   
+  // Get the padding of jodit-wysiwyg (40px top, 60px left for A4)
+  var paddingLeft = 60;
+  var paddingTop = 40;
+  
   // Horizontal ruler (21cm for A4 width = 210mm)
+  // Start from the content area (after padding)
   var hHtml = '';
   for (var i = 0; i <= 21; i++) {
-    var pos = i * cmToPx;
+    var pos = paddingLeft + (i * cmToPx);
     hHtml += '<div class="ruler-mark" style="left: ' + pos + 'px;">' + i + '</div>';
   }
   rulerHMarks.innerHTML = hHtml;
   
+  // Vertical ruler - set height based on jodit content
+  var contentHeight = joditArea ? joditArea.offsetHeight : 1123;
+  if (rulerV) rulerV.style.height = contentHeight + 'px';
+  
   // Vertical ruler (30cm to cover A4 height of 29.7cm)
   var vHtml = '';
   for (var i = 0; i <= 30; i++) {
-    var pos = i * cmToPx;
+    var pos = paddingTop + (i * cmToPx);
     vHtml += '<div class="ruler-mark" style="top: ' + pos + 'px;">' + i + '</div>';
   }
   rulerVMarks.innerHTML = vHtml;

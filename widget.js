@@ -1615,6 +1615,7 @@ function initEditor() {
     placeholder: currentLang === 'fr' ? 'Commencez à écrire votre document ici...' : 'Start writing your document here...',
     allowResizeY: true,
     toolbarAdaptive: false,
+    toolbarContainer: '#jodit-toolbar-container',
     askBeforePasteHTML: false,
     askBeforePasteFromWord: false,
     defaultActionOnPaste: 'insert_clear_html',

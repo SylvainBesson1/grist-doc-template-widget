@@ -289,20 +289,27 @@
       border-radius: 0;
       overflow: visible;
     }
-    /* Toolbar styling */
+    /* Toolbar container (separate from page) */
+    #jodit-toolbar-container {
+      background: white;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      margin-bottom: 12px;
+      position: sticky;
+      top: 188px;
+      z-index: 50;
+      padding: 0;
+    }
+    #jodit-toolbar-container .jodit-toolbar__box {
+      position: static !important;
+      box-shadow: none !important;
+      border: none !important;
+      margin-bottom: 0 !important;
+    }
     .jodit-container { 
       border: none !important;
       background: transparent !important;
-    }
-    .jodit-toolbar__box {
-      background: white !important;
-      border: 1px solid #e2e8f0 !important;
-      border-radius: 6px !important;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.1) !important;
-      margin-bottom: 12px !important;
-      position: sticky !important;
-      top: 188px !important;
-      z-index: 50 !important;
     }
     .jodit-workplace {
       min-height: 400px !important;
@@ -377,7 +384,7 @@
     .editor-page-with-rulers .ruler-corner,
     .editor-page-with-rulers .ruler-h,
     .editor-page-with-rulers .ruler-v { display: block; }
-    .editor-page-with-rulers .editor-wrapper { grid-column: 2; grid-row: 2; width: 100%; max-width: 794px; box-sizing: border-box; overflow: hidden; }
+    .editor-page-with-rulers .editor-wrapper { grid-column: 2; grid-row: 2; width: 794px; box-sizing: border-box; }
     .ruler-marks { position: relative; height: 100%; width: 100%; }
     .ruler-h .ruler-mark { position: absolute; top: 0; height: 100%; border-left: 1px solid #cbd5e1; font-size: 8px; color: #475569; padding-left: 2px; line-height: 20px; }
     .ruler-h .ruler-mark.cm5 { border-left: 1px solid #94a3b8; }
@@ -795,7 +802,10 @@
     <div class="tab-content active" id="tab-editor">
       <div class="main">
 
-        <!-- EDITOR -->
+        <!-- JODIT TOOLBAR (separate from page) -->
+        <div id="jodit-toolbar-container"></div>
+
+        <!-- EDITOR PAGE -->
         <div id="editor-page-wrapper" class="editor-page-a4">
           <div class="ruler-corner" id="ruler-corner">cm</div>
           <div class="ruler-h" id="ruler-h"><div class="ruler-marks" id="ruler-h-marks"></div></div>

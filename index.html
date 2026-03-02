@@ -447,10 +447,13 @@
     .preview-pages-wrapper {
       background: #f1f5f9;
       padding: 20px;
+      padding-top: 45px; /* space for horizontal ruler (20px) + gap */
+      padding-left: 50px; /* space for vertical ruler (25px) + gap */
       border-radius: 8px;
+      overflow: visible;
     }
     .preview-pages-wrapper.preview-format-a4 {
-      max-width: 834px; /* 794px page + 2*20px wrapper padding */
+      max-width: 864px; /* 794px page + 50px left padding + 20px right padding */
       margin: 0 auto;
     }
     .preview-pages-wrapper.preview-format-a4 .preview-page {

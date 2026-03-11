@@ -3628,7 +3628,7 @@ function executeLoop(filterColumn, filterValue, loopContent, forPdf) {
   }
   
   return output;
-}
+
 
 function resolveTemplate(html, record, forPdf) {
   var resolved = html;

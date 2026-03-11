@@ -587,109 +587,86 @@ async function loadColumnMetadata(tableName) {
 
 async function resolveReferences() {
   if (!tableData || !columnMetadata) return;
-  
+
   for (var colName in columnMetadata) {
     var meta = columnMetadata[colName];
     if (!meta.type) continue;
-    
-    // Check if it's a Reference or ReferenceList column
+
+    // Vérifier si c'est une colonne de type Ref ou RefList
     var refMatch = meta.type.match(/^Ref:(.+)$/);
     var refListMatch = meta.type.match(/^RefList:(.+)$/);
-    
+
     if (refMatch || refListMatch) {
       var refTableName = refMatch ? refMatch[1] : refListMatch[1];
-      
-      // Fetch the referenced table if not cached
+
+      // Récupérer les données de la table référencée si non en cache
       if (!referenceTables[refTableName]) {
         try {
           referenceTables[refTableName] = await grist.docApi.fetchTable(refTableName);
-          console.log('Fetched reference table:', refTableName);
-          
-          // Build display values map using visibleCol from the reference column metadata
-          // This is the column Grist uses to display reference values
-          referenceDisplayValues[refTableName] = { byVisibleCol: {}, byFirstTextCol: {} };
+          console.log('Table référencée récupérée:', refTableName);
+
+          // Construire une map des valeurs d'affichage
+          referenceDisplayValues[refTableName] = {};
           var refData = referenceTables[refTableName];
-          
-          // Use visibleCol from metadata if available, otherwise find display column
-          var visibleColName = meta.visibleCol || findDisplayColumn(refData, null);
-          
-          // Also find the first text column (often contains identifiers like "DUMZ 60")
-          var firstTextCol = null;
-          for (var colKey in refData) {
-            if (colKey !== 'id' && colKey !== 'manualSort' && !colKey.startsWith('gristHelper_')) {
-              if (refData[colKey] && refData[colKey].length > 0 && typeof refData[colKey][0] === 'string') {
-                firstTextCol = colKey;
-                break;
-              }
-            }
-          }
-          
-          if (refData.id) {
+
+          // Utiliser visibleCol si défini, sinon trouver une colonne de texte par défaut
+          var displayColName = meta.visibleCol || findDisplayColumn(refData, null);
+
+          if (refData.id && refData[displayColName]) {
             for (var k = 0; k < refData.id.length; k++) {
-              if (visibleColName && refData[visibleColName]) {
-                referenceDisplayValues[refTableName].byVisibleCol[refData.id[k]] = refData[visibleColName][k];
-              }
-              if (firstTextCol && refData[firstTextCol] && firstTextCol !== visibleColName) {
-                referenceDisplayValues[refTableName].byFirstTextCol[refData.id[k]] = refData[firstTextCol][k];
-              }
+              referenceDisplayValues[refTableName][refData.id[k]] = refData[displayColName][k];
             }
-            console.log('Built reference display map for', refTableName, '- visibleCol:', visibleColName, ', firstTextCol:', firstTextCol);
+            console.log('Map des valeurs d\'affichage construite pour', refTableName, 'avec la colonne:', displayColName);
           }
         } catch (e) {
-          console.warn('Could not fetch reference table:', refTableName, e);
+          console.warn('Impossible de récupérer la table référencée:', refTableName, e);
           continue;
         }
       }
-      
-      var refTable = referenceTables[refTableName];
-      if (!refTable || !tableData[colName]) continue;
-      
-      // Find the display column (usually the first text column or rowId)
-      var displayColName = findDisplayColumn(refTable, meta.visibleCol);
-      
-      // Replace IDs with display values
+
+      // Remplacer les IDs par les valeurs d'affichage
       var resolvedValues = [];
       for (var i = 0; i < tableData[colName].length; i++) {
         var refId = tableData[colName][i];
         if (refListMatch && Array.isArray(refId)) {
-          // ReferenceList: array of IDs
+          // Cas RefList: tableau d'IDs
           var names = [];
           for (var j = 0; j < refId.length; j++) {
-            var name = lookupRefValue(refTable, refId[j], displayColName);
+            var name = referenceDisplayValues[refTableName][refId[j]];
             if (name) names.push(name);
           }
           resolvedValues.push(names.join(', '));
         } else if (refId && typeof refId === 'number' && refId !== 0) {
-          // Single Reference (0 means empty reference)
-          var displayValue = lookupRefValue(refTable, refId, displayColName);
+          // Cas Ref simple (0 signifie référence vide)
+          var displayValue = referenceDisplayValues[refTableName][refId];
           resolvedValues.push(displayValue || refId);
         } else if (refId === 0 || refId === null || refId === undefined) {
-          // Empty reference
+          // Référence vide
           resolvedValues.push('');
         } else {
           resolvedValues.push(refId);
         }
       }
       tableData[colName] = resolvedValues;
-      console.log('Resolved references for', colName, ':', resolvedValues.slice(0, 3));
+      console.log('Références résolues pour', colName, ':', resolvedValues.slice(0, 3));
     }
   }
 }
 
+
 function findDisplayColumn(refTable, visibleColId) {
-  // If visibleCol is specified, try to find it
+  // Si visibleCol est spécifié, l'utiliser
   if (visibleColId) {
-    // visibleCol is a column ID, we need to find the column name
-    // For now, just use common display columns
+    return visibleColId;
   }
-  
-  // Try common display column names
-  var commonNames = ['Nom_complet', 'Nom complet', 'nom_complet', 'Name', 'name', 'Nom', 'nom', 'Label', 'label', 'Title', 'title'];
+
+  // Sinon, essayer les colonnes courantes pour les noms
+  var commonNames = ['Nom', 'nom', 'Name', 'name', 'Label', 'label', 'Titre', 'titre', 'Title', 'title'];
   for (var i = 0; i < commonNames.length; i++) {
     if (refTable[commonNames[i]]) return commonNames[i];
   }
-  
-  // Fallback: find first text column (not id, not manualSort)
+
+  // Sinon, retourner la première colonne de type texte
   for (var col in refTable) {
     if (col !== 'id' && col !== 'manualSort' && !col.startsWith('gristHelper_')) {
       if (refTable[col] && refTable[col].length > 0 && typeof refTable[col][0] === 'string') {
@@ -697,9 +674,10 @@ function findDisplayColumn(refTable, visibleColId) {
       }
     }
   }
-  
+
   return null;
 }
+
 
 function lookupRefValue(refTable, refId, displayColName) {
   if (!refTable || !refTable.id || !displayColName) return null;
@@ -1083,16 +1061,16 @@ function updateEditLoopValueOptions() {
 
 function insertTableWithLoop() {
   if (!editorInstance) return;
-  
+
   // Restore cursor position if it was saved
   restoreEditorSelection();
-  
+
   // Build column selector options
   var colOptions = '';
   for (var i = 0; i < tableColumns.length; i++) {
     colOptions += '<option value="' + tableColumns[i] + '">' + tableColumns[i] + '</option>';
   }
-  
+
   // Build view selector options
   var viewOptions = '<option value="">' + (currentLang === 'fr' ? '-- Choisir une vue --' : '-- Choose a view --') + '</option>';
   for (var v = 0; v < availableViews.length; v++) {
@@ -1101,19 +1079,7 @@ function insertTableWithLoop() {
     var hasFilters = availableViews[v].filters ? ' 🔍' : '';
     viewOptions += '<option value="' + viewId + '">' + viewName + hasFilters + '</option>';
   }
-  
-  var viewLinkedHelp = currentLang === 'fr' 
-    ? '💡 Utilise les lignes visibles via "Sélectionner par" (panneau Grist à droite)'
-    : '💡 Uses visible rows via "Select By" (Grist panel on the right)';
-  
-  var viewSelectHelp = currentLang === 'fr'
-    ? '💡 Sélectionnez une vue existante pour utiliser ses filtres'
-    : '💡 Select an existing view to use its filters';
-  
-  var linkedTableHelp = currentLang === 'fr'
-    ? '💡 Affiche les lignes d\'une autre table liées à l\'enregistrement courant (ex: Facture_details liée à Facture)'
-    : '💡 Shows rows from another table linked to the current record (e.g., Invoice_details linked to Invoice)';
-  
+
   // Build table selector options (all tables except current)
   var tableOptions = '<option value="">' + (currentLang === 'fr' ? '-- Choisir une table --' : '-- Choose a table --') + '</option>';
   for (var t = 0; t < allTables.length; t++) {
@@ -1121,45 +1087,26 @@ function insertTableWithLoop() {
       tableOptions += '<option value="' + allTables[t] + '">' + allTables[t] + '</option>';
     }
   }
-  
+
   var formHtml = '<div style="text-align:left;">' +
     '<div style="margin-bottom:15px;">' +
     '<label style="display:block;margin-bottom:8px;font-weight:600;">' + (currentLang === 'fr' ? 'Type de tableau :' : 'Table type:') + '</label>' +
     '<label style="display:block;margin-bottom:5px;cursor:pointer;">' +
     '<input type="radio" name="loop-type" value="view" checked style="margin-right:8px;">' +
     (currentLang === 'fr' ? 'Lié à la vue courante' : 'Linked to current view') + '</label>' +
-    '<p style="margin:0 0 10px 24px;font-size:0.85em;color:#6b7280;">' + viewLinkedHelp + '</p>' +
     '<label style="display:block;margin-bottom:5px;cursor:pointer;">' +
     '<input type="radio" name="loop-type" value="viewselect" style="margin-right:8px;">' +
     (currentLang === 'fr' ? 'Lié à une vue filtrée' : 'Linked to a filtered view') + '</label>' +
-    '<p style="margin:0 0 10px 24px;font-size:0.85em;color:#6b7280;">' + viewSelectHelp + '</p>' +
-    '<label style="display:block;margin-bottom:5px;cursor:pointer;">' +
-    '<input type="radio" name="loop-type" value="linkedtable" style="margin-right:8px;">' +
-    (currentLang === 'fr' ? 'Lié à une table externe' : 'Linked to external table') + '</label>' +
-    '<p style="margin:0 0 10px 24px;font-size:0.85em;color:#6b7280;">' + linkedTableHelp + '</p>' +
     '<label style="display:block;margin-bottom:5px;cursor:pointer;">' +
     '<input type="radio" name="loop-type" value="filter" style="margin-right:8px;">' +
     (currentLang === 'fr' ? 'Avec filtre manuel' : 'With manual filter') + '</label>' +
+    '<label style="display:block;margin-bottom:5px;cursor:pointer;">' +
+    '<input type="radio" name="loop-type" value="current_cell" style="margin-right:8px;">' +
+    (currentLang === 'fr' ? 'Boucle sur la cellule courante (références multiples)' : 'Loop on current cell (multiple references)') + '</label>' +
     '</div>' +
     '<div id="view-select-options" style="display:none;border:1px solid #e5e7eb;padding:10px;border-radius:6px;margin-bottom:10px;background:#f0fdf4;">' +
     '<label style="display:block;margin-bottom:5px;font-weight:600;">' + (currentLang === 'fr' ? 'Vue à utiliser :' : 'View to use:') + '</label>' +
     '<select id="loop-view-select" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">' + viewOptions + '</select>' +
-    '</div>' +
-    '<div id="linked-table-options" style="display:none;border:1px solid #e5e7eb;padding:10px;border-radius:6px;margin-bottom:10px;background:#fef3c7;">' +
-    '<div style="margin-bottom:10px;">' +
-    '<label style="display:block;margin-bottom:5px;font-weight:600;">' + (currentLang === 'fr' ? 'Table à afficher :' : 'Table to display:') + '</label>' +
-    '<select id="loop-linked-table" onchange="updateLinkedTableColumns()" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">' + tableOptions + '</select>' +
-    '</div>' +
-    '<div style="margin-bottom:10px;">' +
-    '<label style="display:block;margin-bottom:5px;font-weight:600;">' + (currentLang === 'fr' ? 'Colonne de référence (vers ' + selectedTable + ') :' : 'Reference column (to ' + selectedTable + '):') + '</label>' +
-    '<select id="loop-linked-ref-col" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">' +
-    '<option value="">' + (currentLang === 'fr' ? '-- Choisir la colonne Ref --' : '-- Choose Ref column --') + '</option>' +
-    '</select>' +
-    '</div>' +
-    '<div id="linked-cols-container" style="display:none;">' +
-    '<label style="display:block;margin-bottom:5px;font-weight:600;">' + (currentLang === 'fr' ? 'Colonnes à afficher :' : 'Columns to display:') + '</label>' +
-    '<div id="linked-cols-checkboxes" style="max-height:120px;overflow-y:auto;border:1px solid #eee;padding:8px;border-radius:4px;background:white;"></div>' +
-    '</div>' +
     '</div>' +
     '<div id="filter-options" style="display:none;border:1px solid #e5e7eb;padding:10px;border-radius:6px;margin-bottom:10px;background:#f9fafb;">' +
     '<div style="margin-bottom:10px;">' +
@@ -1177,18 +1124,18 @@ function insertTableWithLoop() {
     '<div style="margin-bottom:10px;">' +
     '<label style="display:block;margin-bottom:5px;font-weight:600;">' + (currentLang === 'fr' ? 'Colonnes à afficher :' : 'Columns to display:') + '</label>' +
     '<div id="loop-cols-checkboxes" style="max-height:150px;overflow-y:auto;border:1px solid #eee;padding:8px;border-radius:4px;">';
-  
+
   for (var j = 0; j < tableColumns.length; j++) {
     var checked = j < 5 ? 'checked' : '';
     formHtml += '<label style="display:block;margin-bottom:5px;cursor:pointer;">' +
       '<input type="checkbox" value="' + tableColumns[j] + '" ' + checked + ' style="margin-right:8px;">' +
       tableColumns[j] + '</label>';
   }
-  
+
   formHtml += '</div></div></div>';
-  
+
   // Show modal and initialize value dropdown + radio button handlers
-  setTimeout(function() { 
+  setTimeout(function() {
     updateLoopValueOptions();
     // Add event listeners for radio buttons
     var radios = document.querySelectorAll('input[name="loop-type"]');
@@ -1196,39 +1143,27 @@ function insertTableWithLoop() {
       radio.addEventListener('change', function() {
         var filterOptions = document.getElementById('filter-options');
         var viewSelectOptions = document.getElementById('view-select-options');
-        var linkedTableOptions = document.getElementById('linked-table-options');
-        var loopColsSection = document.getElementById('loop-cols-checkboxes');
         if (filterOptions) {
           filterOptions.style.display = this.value === 'filter' ? 'block' : 'none';
         }
         if (viewSelectOptions) {
           viewSelectOptions.style.display = this.value === 'viewselect' ? 'block' : 'none';
         }
-        if (linkedTableOptions) {
-          linkedTableOptions.style.display = this.value === 'linkedtable' ? 'block' : 'none';
-        }
-        // Hide main columns section when linkedtable is selected (it has its own)
-        if (loopColsSection && loopColsSection.parentElement) {
-          loopColsSection.parentElement.style.display = this.value === 'linkedtable' ? 'none' : 'block';
-        }
       });
     });
   }, 100);
-  
+
   showModal(currentLang === 'fr' ? '📊 Tableau avec boucle' : '📊 Table with loop', formHtml).then(function(confirmed) {
     if (!confirmed) return;
-    
+
     // Check which type is selected
     var loopType = document.querySelector('input[name="loop-type"]:checked');
     var loopTypeValue = loopType ? loopType.value : 'view';
-    
+
     var filterCol = '';
     var filterVal = '';
     var selectedViewId = '';
-    
-    var linkedTableName = '';
-    var linkedRefCol = '';
-    
+
     if (loopTypeValue === 'filter') {
       filterCol = document.getElementById('loop-filter-col').value;
       // Use dropdown value if selected, otherwise use text input
@@ -1238,31 +1173,17 @@ function insertTableWithLoop() {
     } else if (loopTypeValue === 'viewselect') {
       var viewSelect = document.getElementById('loop-view-select');
       selectedViewId = viewSelect ? viewSelect.value : '';
-    } else if (loopTypeValue === 'linkedtable') {
-      var linkedTableSelect = document.getElementById('loop-linked-table');
-      var linkedRefColSelect = document.getElementById('loop-linked-ref-col');
-      linkedTableName = linkedTableSelect ? linkedTableSelect.value : '';
-      linkedRefCol = linkedRefColSelect ? linkedRefColSelect.value : '';
     }
-    
-    // Get selected columns (from linked table if linkedtable type)
-    var checkboxes;
+
+    // Get selected columns
+    var checkboxes = document.querySelectorAll('#loop-cols-checkboxes input[type="checkbox"]:checked');
     var selectedCols = [];
-    if (loopTypeValue === 'linkedtable') {
-      checkboxes = document.querySelectorAll('#linked-cols-checkboxes input[type="checkbox"]:checked');
-    } else {
-      checkboxes = document.querySelectorAll('#loop-cols-checkboxes input[type="checkbox"]:checked');
-    }
     checkboxes.forEach(function(cb) { selectedCols.push(cb.value); });
-    
+
     if (selectedCols.length === 0) {
-      if (loopTypeValue === 'linkedtable' && linkedTableMetadata[linkedTableName]) {
-        selectedCols = linkedTableMetadata[linkedTableName].columns.slice(0, 5);
-      } else {
-        selectedCols = tableColumns.slice(0, 5);
-      }
+      selectedCols = tableColumns.slice(0, 5);
     }
-    
+
     // Build table HTML
     var headerCells = '';
     var dataCells = '';
@@ -1270,9 +1191,19 @@ function insertTableWithLoop() {
       headerCells += '<th style="border:1px solid #ccc;padding:8px;background:#f3f4f6;">' + selectedCols[k] + '</th>';
       dataCells += '<td style="border:1px solid #ccc;padding:8px;">{{' + selectedCols[k] + '}}</td>';
     }
-    
+
     var tableHtml;
-    if (loopTypeValue === 'view') {
+    if (loopTypeValue === 'current_cell') {
+      // Special case for current cell (multiple references)
+      tableHtml = '<table style="border-collapse:collapse;width:100%;margin:10px 0;">' +
+        '<thead><tr>' + headerCells + '</tr></thead>' +
+        '<tbody>' +
+        '<!--LOOP:CURRENT_CELL-->' +
+        '<tr>' + dataCells + '</tr>' +
+        '<!--/LOOP-->' +
+        '</tbody>' +
+        '</table>';
+    } else if (loopTypeValue === 'view') {
       // View-linked table: uses <!--LOOP:*--> to show all rows from the current view
       tableHtml = '<table style="border-collapse:collapse;width:100%;margin:10px 0;">' +
         '<thead><tr>' + headerCells + '</tr></thead>' +
@@ -1292,16 +1223,6 @@ function insertTableWithLoop() {
         '<!--/LOOP-->' +
         '</tbody>' +
         '</table>';
-    } else if (loopTypeValue === 'linkedtable' && linkedTableName && linkedRefCol) {
-      // Linked table: uses <!--LOOP:TABLE:tableName:refColumn--> to show rows from linked table
-      tableHtml = '<table style="border-collapse:collapse;width:100%;margin:10px 0;">' +
-        '<thead><tr>' + headerCells + '</tr></thead>' +
-        '<tbody>' +
-        '<!--LOOP:TABLE:' + linkedTableName + ':' + linkedRefCol + '-->' +
-        '<tr>' + dataCells + '</tr>' +
-        '<!--/LOOP-->' +
-        '</tbody>' +
-        '</table>';
     } else {
       // Filtered table
       tableHtml = '<table style="border-collapse:collapse;width:100%;margin:10px 0;">' +
@@ -1313,7 +1234,7 @@ function insertTableWithLoop() {
         '</tbody>' +
         '</table>';
     }
-    
+
     editorInstance.selection.insertHTML(tableHtml);
     showToast(currentLang === 'fr' ? 'Tableau avec boucle inséré' : 'Table with loop inserted', 'info');
   });
@@ -3615,64 +3536,38 @@ function executeLoopAllRows(loopContent, forPdf) {
 }
 
 function executeLoop(filterColumn, filterValue, loopContent, forPdf) {
-  if (!tableData || !tableColumns.length) return '';
-  
-  // Find the filter column in tableData
-  var filterColData = tableData[filterColumn];
-  if (!filterColData) {
-    // Column not found - return error message with available columns
-    var availableCols = tableColumns.join(', ');
-    return '<span style="color:red;">[Colonne "' + filterColumn + '" non trouvée. Colonnes disponibles: ' + availableCols + ']</span>';
-  }
-  
-  // Find all rows where filterColumn matches filterValue
-  var matchingIndices = [];
-  var sampleValues = [];
-  
-  for (var i = 0; i < filterColData.length; i++) {
-    var cellValue = filterColData[i];
-    var cellStr = (cellValue === null || cellValue === undefined) ? '' : String(cellValue);
-    
-    // Collect sample values for debug (first 3 unique)
-    if (sampleValues.length < 3 && sampleValues.indexOf(cellStr) === -1) {
-      sampleValues.push(cellStr);
-    }
-    
-    // Normalize for date comparison
-    var normalizedCell = normalizeForComparison(cellStr);
-    var normalizedFilter = normalizeForComparison(filterValue);
-    
-    // Check if filter value is a reference display value (e.g., "DUMZ 60")
-    // and if so, check if the resolved value matches
-    var refMatch = false;
-    var meta = columnMetadata[filterColumn];
-    if (meta && meta.type) {
-      var refTypeMatch = meta.type.match(/^Ref:(.+)$/);
-      if (refTypeMatch) {
-        var refTableName = refTypeMatch[1];
-        var refDisplayData = referenceDisplayValues[refTableName];
-        if (refDisplayData) {
-          // Check both byVisibleCol and byFirstTextCol for matching filter value
-          var allRefMaps = [refDisplayData.byVisibleCol, refDisplayData.byFirstTextCol];
-          for (var mapIdx = 0; mapIdx < allRefMaps.length && !refMatch; mapIdx++) {
-            var refMap = allRefMaps[mapIdx];
-            if (!refMap) continue;
-            for (var refId in refMap) {
-              var refDisplayVal = refMap[refId];
-              if (refDisplayVal === filterValue || 
-                  normalizeForComparison(refDisplayVal) === normalizedFilter) {
-                // Check if the resolved cell value matches this reference's resolved value
-                var resolvedRefVal = lookupRefValue(referenceTables[refTableName], parseInt(refId), findDisplayColumn(referenceTables[refTableName], meta.visibleCol));
-                if (cellStr === resolvedRefVal || normalizedCell === normalizeForComparison(resolvedRefVal)) {
-                  refMatch = true;
-                  break;
-                }
-              }
+  if (filterColumn === 'CURRENT_CELL') {
+    // Cas spécial pour les boucles dans les cellules (références multiples)
+    var currentRow = getRecordAt(currentRecordIndex);
+    var cellValue = currentRow[filterValue]; // filterValue contient le nom de la colonne
+
+    if (Array.isArray(cellValue)) {
+      var output = '';
+      for (var i = 0; i < cellValue.length; i++) {
+        var rowHtml = loopContent;
+        for (var col in tableColumns) {
+          var val = cellValue[i];
+          var display = formatValueForDisplay(val);
+          var plainRegex = new RegExp('\\{\\{' + escapeRegex(tableColumns[col]) + '\\}\\}', 'g');
+          if (display) {
+            if (forPdf) {
+              rowHtml = rowHtml.replace(plainRegex, sanitize(display));
+            } else {
+              rowHtml = rowHtml.replace(plainRegex, '<span class="var-resolved">' + sanitize(display) + '</span>');
             }
+          } else {
+            rowHtml = rowHtml.replace(plainRegex, '');
           }
         }
+        output += rowHtml;
       }
+      return output;
+    } else {
+      return '';
     }
+  }
+
+
     
     // Flexible matching: exact match, contains, normalized match, or reference match
     if (cellStr === filterValue || 

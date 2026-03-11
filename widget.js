@@ -403,11 +403,17 @@ async function onTableChange(skipSave) {
     }
 
     currentRecordIndex = 0;
+
+    // Force refresh preview if we're on the preview tab
+    if (document.querySelector('.tab-btn.active').getAttribute('data-tab') === 'preview') {
+      renderPreview();
+    }
   } catch (error) {
     console.error('Error loading table data:', error);
     showToast(t('importError') + error.message, 'error');
   }
 }
+
 
 // Auto-save editor content periodically
 var autoSaveTimer = null;
@@ -2879,21 +2885,22 @@ function postProcessWordHtml(html) {
 // =============================================================================
 
 function getRecordCount() {
-  if (!tableData || !tableColumns.length) return 0;
+  if (!tableData || !tableColumns || tableColumns.length === 0) return 0;
   var firstCol = tableColumns[0];
-  return (tableData[firstCol] || []).length;
+  return tableData[firstCol] ? tableData[firstCol].length : 0;
 }
 
 function getRecordAt(index) {
-  if (!tableData || index < 0) return {};
-  var record = {};
+  if (!tableData || !tableColumns || tableColumns.length === 0 || index < 0) return {};
+  var record = { id: tableData.id ? tableData.id[index] : index };
   for (var i = 0; i < tableColumns.length; i++) {
     var col = tableColumns[i];
     var arr = tableData[col] || [];
-    record[col] = (index < arr.length) ? arr[index] : '';
+    record[col] = (index < arr.length) ? arr[index] : null;
   }
   return record;
 }
+
 
 // =============================================================================
 // LOOP PROCESSING - {{#each Column=Value}}...{{/each}}
@@ -3840,7 +3847,7 @@ function renderPreview() {
     return;
   }
 
-  if (!selectedTable || !tableData || !tableColumns.length) {
+  if (!selectedTable || !tableData || !tableColumns || tableColumns.length === 0) {
     previewContainer.innerHTML = '<div style="padding:20px;text-align:center;color:#ef4444;">' + t('noData') + '</div>';
     return;
   }
@@ -3853,6 +3860,11 @@ function renderPreview() {
 
   // Resolve variables for current record
   var record = getRecordAt(currentRecordIndex);
+  if (!record) {
+    previewContainer.innerHTML = '<div style="padding:20px;text-align:center;color:#ef4444;">' + t('noData') + '</div>';
+    return;
+  }
+
   var resolvedHtml = resolveTemplate(html, record, false);
 
   // Add record navigation
@@ -3866,6 +3878,7 @@ function renderPreview() {
 
   previewContainer.innerHTML = navHtml + '<div style="padding:20px;">' + resolvedHtml + '</div>';
 }
+
 
 function prevRecord() {
   if (currentRecordIndex > 0) {
@@ -3989,6 +4002,80 @@ async function generatePdf() {
       pdfDoc.save(pdfFilename + '_partial.pdf');
       showToast(t('pdfCancelled').replace('{count}', pdfPages.length), 'warning');
     }
+  } catch (error) {
+    console.error('PDF generation error:', error);
+    showToast(t('pdfError') + error.message, 'error');
+  } finally {
+    if (progress) progress.style.display = 'none';
+    pdfDoc = null;
+    pdfPages = [];
+  }
+}
+
+async function generateSinglePdf() {
+  if (!editorInstance) {
+    showToast(t('noTemplate'), 'error');
+    return;
+  }
+
+  var html = getEditorHtml();
+  if (!html || !html.trim()) {
+    showToast(t('noTemplate'), 'error');
+    return;
+  }
+
+  if (!selectedTable || !tableData || !tableColumns.length) {
+    showToast(t('noData'), 'error');
+    return;
+  }
+
+  // Get PDF settings from UI
+  var filenameInput = document.getElementById('pdf-filename');
+  var pageSizeSelect = document.getElementById('pdf-page-size');
+  var skipEmptyPagesSelect = document.getElementById('skip-empty-pages');
+  var boolFormatSelect = document.getElementById('bool-format');
+  var imageBaseUrlInput = document.getElementById('image-base-url');
+
+  pdfFilename = filenameInput ? filenameInput.value.trim() : 'document';
+  if (!pdfFilename) pdfFilename = 'document';
+
+  pdfPageSize = pageSizeSelect ? pageSizeSelect.value : 'a4';
+  pdfSkipEmptyPages = skipEmptyPagesSelect ? skipEmptyPagesSelect.value === 'yes' : false;
+  pdfBoolFormat = boolFormatSelect ? boolFormatSelect.value : 'checkbox';
+  pdfImageBaseUrl = imageBaseUrlInput ? imageBaseUrlInput.value.trim() : '';
+
+  // Show progress
+  var progress = document.getElementById('pdf-progress');
+  var progressText = document.getElementById('pdf-progress-text');
+  var progressBar = document.getElementById('pdf-progress-bar');
+
+  if (progress) progress.style.display = 'block';
+  if (progressText) progressText.textContent = t('pdfGenerating').replace('{current}', '1').replace('{total}', '1');
+  if (progressBar) progressBar.style.width = '100%';
+
+  pdfCancelled = false;
+  pdfPages = [];
+
+  try {
+    // Initialize PDF document
+    pdfDoc = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: pdfPageSize
+    });
+
+    // Process current record only
+    var record = getRecordAt(currentRecordIndex);
+
+    // Resolve template for this record
+    var resolvedHtml = await resolveTemplateAsync(html, record, true);
+
+    // Add to PDF
+    await addPdfPage(resolvedHtml, 1, 1);
+
+    // Save PDF
+    pdfDoc.save(pdfFilename + '.pdf');
+    showToast(t('pdfDone').replace('{count}', pdfPages.length), 'success');
   } catch (error) {
     console.error('PDF generation error:', error);
     showToast(t('pdfError') + error.message, 'error');

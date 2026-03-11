@@ -3143,7 +3143,7 @@ function executeLoopFromView(viewId, loopContent, forPdf) {
     return '<span style="color:#f59e0b;font-style:italic;">[' + (currentLang === 'fr' ? 'Aucune ligne correspondante dans la vue ' : 'No matching rows in view ') + viewInfo.name + ']</span>';
   }
   
-  return output;
+return output;
 }
 
 // Cache for linked table data

@@ -1206,11 +1206,43 @@ function insertTableWithLoop() {
         document.getElementById('loop-filter-val').value;
       loopInstruction = 'LOOP:' + col + '=' + val;
 
-    } else if (loopType === 'cellloop') {
-      // 🔥 NOUVEAU MODE GÉNÉRIQUE
-      loopInstruction = 'LOOP:CELL:' + selectedCols.join('|');
-    }
+    } else if (loopInstruction.startsWith('LOOP:CELL:')) {
 
+  var config = loopInstruction.replace('LOOP:CELL:', '');
+  var modeMatch = config.match(/mode=(\w+)/);
+  var mode = modeMatch ? modeMatch[1] : 'vertical';
+  config = config.replace(/\|?mode=\w+/, '');
+  var cols = config.split('|').map(c => c.trim()).filter(Boolean);
+
+  var newHtml = '';
+
+  if (mode === 'vertical') {
+    cols.forEach(function(col) {
+      var list = currentRecord[col] || [];
+      list.forEach(function(item) {
+        var value = (item && typeof item === 'object') ? (item.Name || item.label || item.id || '') : (item || '');
+        var rowHtml = templateRowHtml;
+        rowHtml = rowHtml.replace(new RegExp('{{\\s*' + col + '\\s*}}', 'g'), value);
+        newHtml += rowHtml;
+      });
+    });
+  }
+  else if (mode === 'aligned') {
+    var lists = cols.map(c => currentRecord[c] || []);
+    var maxLen = Math.max.apply(null, lists.map(l => l.length || 0));
+    for (var i = 0; i < maxLen; i++) {
+      var rowHtml = templateRowHtml;
+      cols.forEach(function(col, idx) {
+        var val = lists[idx][i];
+        var value = (val && typeof val === 'object') ? (val.Name || val.label || val.id || '') : (val || '');
+        rowHtml = rowHtml.replace(new RegExp('{{\\s*' + col + '\\s*}}', 'g'), value);
+      });
+      newHtml += rowHtml;
+    }
+  }
+
+  return newHtml;
+}
     // --- HTML final ---
     var tableHtml =
       '<table style="border-collapse:collapse;width:100%;margin:10px 0;">' +

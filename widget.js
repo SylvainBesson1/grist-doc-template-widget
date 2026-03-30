@@ -218,6 +218,10 @@ var pdfCancelled = false;
 // UTILS
 // =============================================================================
 
+// =============================================================================
+// UTILS
+// =============================================================================
+
 function sanitize(str) {
   var div = document.createElement('div');
   div.textContent = str;
@@ -227,6 +231,7 @@ function sanitize(str) {
 function isInsideGrist() {
   try { return window.self !== window.top; } catch (e) { return true; }
 }
+
 function getEditorHtml() {
   return editorInstance ? editorInstance.getEditorValue() : '';
 }
@@ -238,19 +243,49 @@ function setEditorHtml(html) {
   }
 }
 
-function loadSavedTemplate() {
-  if (!selectedTable) return;
-
-  // Try to load from Grist options
-  grist.widgetApi.getOptions().then(function(options) {
-    if (options && options['template_' + selectedTable]) {
-      setEditorHtml(options['template_' + selectedTable]);
-      templateHtml = options['template_' + selectedTable];
-    }
-  }).catch(function(error) {
-    console.warn('Could not load saved template:', error);
-  });
+function escapeRegex(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
+
+// Store last cursor position before clicking outside editor
+var lastEditorRange = null;
+
+function saveEditorSelection() {
+  if (!editorInstance) return;
+  try {
+    var sel = editorInstance.selection;
+    if (sel && sel.sel && sel.sel.rangeCount > 0) {
+      lastEditorRange = sel.sel.getRangeAt(0).cloneRange();
+    }
+  } catch (e) {
+    // Ignore errors
+  }
+}
+
+function restoreEditorSelection() {
+  if (!editorInstance || !lastEditorRange) return false;
+  try {
+    editorInstance.focus();
+    var sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(lastEditorRange);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+function insertVariable(colName) {
+  if (!editorInstance) return;
+
+  // Restore cursor position if it was saved
+  restoreEditorSelection();
+
+  var varHtml = '<span style="background:#f3e8ff;color:#7c3aed;padding:2px 6px;border-radius:4px;font-weight:600;" contenteditable="false">{{' + colName + '}}</span>&nbsp;';
+  editorInstance.selection.insertHTML(varHtml);
+  showToast('{{' + colName + '}} ' + (currentLang === 'fr' ? 'inséré' : 'inserted'), 'info');
+}
+
 // =============================================================================
 // TABS
 // =============================================================================
@@ -292,6 +327,16 @@ if (!isInsideGrist()) {
 } else {
   (async function init() {
   try {
+    if (!isInsideGrist()) {
+      var notInGristElement = document.getElementById('not-in-grist');
+      var mainContentElement = document.getElementById('main-content');
+      if (notInGristElement && mainContentElement) {
+        notInGristElement.classList.remove('hidden');
+        mainContentElement.classList.add('hidden');
+      }
+      return;
+    }
+
     await grist.ready({ requiredAccess: 'full' });
     console.log('Doc Template widget ready');
 
@@ -1568,6 +1613,12 @@ function showLoopEditButton(tableElement, event) {
 // =============================================================================
 
 function initEditor() {
+    var editorContainer = document.getElementById('editor-container');
+  if (!editorContainer) {
+    console.error('Editor container not found');
+    return;
+  }
+
   editorInstance = Jodit.make('#editor-container', {
     language: currentLang,
     minHeight: 500,
@@ -1584,6 +1635,48 @@ function initEditor() {
     addNewLineOnDBLClick: true,
     addNewLineDeltaShow: 20,
     addNewLineTagsTriggers: ['table', 'iframe', 'img', 'hr', 'jodit'],
+    events: {
+      change: function() {
+        scheduleAutoSave();
+      },
+      selectionchange: function() {
+        saveEditorSelection();
+      },
+      blur: function() {
+        saveEditorSelection();
+      },
+      click: function(e) {
+        saveEditorSelection();
+        var target = e.target;
+        var table = target.closest ? target.closest('table') : null;
+        if (!table) {
+          var el = target;
+          while (el && el.tagName !== 'TABLE') {
+            el = el.parentElement;
+          }
+          table = el;
+        }
+
+        if (table) {
+          var hasLoop = false;
+          var tbody = table.querySelector('tbody');
+          if (tbody) {
+            for (var i = 0; i < tbody.childNodes.length; i++) {
+              var node = tbody.childNodes[i];
+              if (node.nodeType === 8 && node.textContent.match(/^LOOP:/)) {
+                hasLoop = true;
+                break;
+              }
+            }
+          }
+          if (hasLoop) {
+            showLoopEditButton(table, e);
+            return;
+          }
+        }
+        removeLoopEditButton();
+      }
+    },
     controls: {
       insertparagraph: {
         name: 'insertparagraph',
@@ -2330,18 +2423,6 @@ function initEditor() {
 // Store last cursor position before clicking outside editor
 var lastEditorRange = null;
 
-function saveEditorSelection() {
-  if (!editorInstance) return;
-  try {
-    var sel = editorInstance.selection;
-    if (sel && sel.sel && sel.sel.rangeCount > 0) {
-      lastEditorRange = sel.sel.getRangeAt(0).cloneRange();
-    }
-  } catch (e) {
-    // Ignore errors
-  }
-}
-
 function restoreEditorSelection() {
   if (!editorInstance || !lastEditorRange) return false;
   try {
@@ -2355,16 +2436,6 @@ function restoreEditorSelection() {
   }
 }
 
-function insertVariable(colName) {
-  if (!editorInstance) return;
-
-  // Restore cursor position if it was saved
-  restoreEditorSelection();
-
-  var varHtml = '<span style="background:#f3e8ff;color:#7c3aed;padding:2px 6px;border-radius:4px;font-weight:600;" contenteditable="false">{{' + colName + '}}</span>&nbsp;';
-  editorInstance.selection.insertHTML(varHtml);
-  showToast('{{' + colName + '}} inséré', 'info');
-}
 
 // Edit existing loop in a table
 function editTableLoop(tableElement) {

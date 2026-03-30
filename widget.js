@@ -330,26 +330,37 @@ if (!isInsideGrist()) {
 
 async function loadTables() {
   var loading = document.getElementById('table-loading');
-  loading.classList.remove('hidden');
+  if (loading) loading.classList.remove('hidden');
+
   try {
-    var tables = await grist.docApi.listTables();
-    allTables = tables.filter(function(t) {
-      return !t.startsWith('_grist_') && !t.startsWith('GristHidden_');
-    });
-    var select = document.getElementById('table-select');
-    select.innerHTML = '<option value="">' + t('selectTableOption') + '</option>';
-    for (var i = 0; i < allTables.length; i++) {
-      var opt = document.createElement('option');
-      opt.value = allTables[i];
-      opt.textContent = allTables[i];
-      select.appendChild(opt);
+    var tables = await grist.docApi.fetchTable('_grist_Tables');
+    allTables = [];
+
+    // Filtrer les tables utiles
+    for (var i = 0; i < tables.tableId.length; i++) {
+      var tableName = tables.tableId[i];
+      if (!tableName.startsWith('_grist_') && !tableName.startsWith('GristHidden_')) {
+        allTables.push(tableName);
+      }
     }
-    
-    // Restore previously selected table
+
+    var select = document.getElementById('table-select');
+    if (select) {
+      select.innerHTML = '<option value="">' + t('selectTableOption') + '</option>';
+      for (var i = 0; i < allTables.length; i++) {
+        var opt = document.createElement('option');
+        opt.value = allTables[i];
+        opt.textContent = allTables[i];
+        select.appendChild(opt);
+      }
+    }
+
+    // Restaurer la table précédemment sélectionnée
     try {
       var savedTable = await grist.widgetApi.getOption('selectedTable');
-      if (savedTable && allTables.indexOf(savedTable) !== -1) {
-        select.value = savedTable;
+      if (savedTable && allTables.includes(savedTable)) {
+        if (select) select.value = savedTable;
+        selectedTable = savedTable;
         await onTableChange(true); // true = skip saving again
       }
     } catch (e) {
@@ -357,13 +368,16 @@ async function loadTables() {
     }
   } catch (error) {
     console.error('Error loading tables:', error);
+    showToast(t('importError') + error.message, 'error');
   } finally {
-    loading.classList.add('hidden');
+    if (loading) loading.classList.add('hidden');
   }
 }
 
 async function onTableChange(skipSave) {
   var select = document.getElementById('table-select');
+  if (!select) return;
+
   selectedTable = select.value;
   if (!selectedTable) {
     tableColumns = [];
@@ -378,18 +392,18 @@ async function onTableChange(skipSave) {
     tableColumns = Object.keys(data).filter(function(c) {
       return c !== 'id' && c !== 'manualSort' && !c.startsWith('gristHelper_');
     });
-    
-    // Fetch column metadata to detect Reference columns
+
+    // Charger les métadonnées des colonnes pour détecter les colonnes de référence
     await loadColumnMetadata(selectedTable);
-    // Resolve reference values
+    // Résoudre les références
     await resolveReferences();
-    // Load available views for this table
+    // Charger les vues disponibles pour cette table
     await loadViewsForTable(selectedTable);
-    
+
     renderVariableChips();
     document.getElementById('var-panel').classList.remove('hidden');
 
-    // Save selected table to widget options (persist across page changes)
+    // Sauvegarder la table sélectionnée dans les options du widget
     if (!skipSave) {
       try {
         await grist.widgetApi.setOption('selectedTable', selectedTable);
@@ -398,7 +412,7 @@ async function onTableChange(skipSave) {
       }
     }
 
-    // Load saved template for this table (only if editor is empty)
+    // Charger le modèle sauvegardé pour cette table
     if (!getEditorHtml().trim()) {
       loadSavedTemplate();
     }
@@ -1077,7 +1091,10 @@ function updateEditLoopValueOptions() {
 }
 
 function insertTableWithLoop() {
-  if (!editorInstance) return;
+  if (!editorInstance || !selectedTable) {
+    showToast(currentLang === 'fr' ? 'Veuillez d\'abord sélectionner une table.' : 'Please select a table first.', 'error');
+    return;
+  }
 
   // Restore cursor position if it was saved
   restoreEditorSelection();
@@ -1088,23 +1105,7 @@ function insertTableWithLoop() {
     colOptions += '<option value="' + tableColumns[i] + '">' + tableColumns[i] + '</option>';
   }
 
-  // Build view selector options
-  var viewOptions = '<option value="">' + (currentLang === 'fr' ? '-- Choisir une vue --' : '-- Choose a view --') + '</option>';
-  for (var v = 0; v < availableViews.length; v++) {
-    var viewName = availableViews[v].name;
-    var viewId = availableViews[v].id;
-    var hasFilters = availableViews[v].filters ? ' 🔍' : '';
-    viewOptions += '<option value="' + viewId + '">' + viewName + hasFilters + '</option>';
-  }
-
-  // Build table selector options (all tables except current)
-  var tableOptions = '<option value="">' + (currentLang === 'fr' ? '-- Choisir une table --' : '-- Choose a table --') + '</option>';
-  for (var t = 0; t < allTables.length; t++) {
-    if (allTables[t] !== selectedTable) {
-      tableOptions += '<option value="' + allTables[t] + '">' + allTables[t] + '</option>';
-    }
-  }
-
+  // Build form HTML
   var formHtml = `
     <div style="text-align:left;">
       <div style="margin-bottom:15px;">
@@ -1134,14 +1135,18 @@ function insertTableWithLoop() {
       <!-- View-select options -->
       <div id="view-select-options" style="display:none;border:1px solid #e5e7eb;padding:10px;border-radius:6px;margin-bottom:10px;background:#f0fdf4;">
         <label style="display:block;margin-bottom:5px;font-weight:600;">${currentLang === 'fr' ? 'Vue à utiliser :' : 'View to use:'}</label>
-        <select id="loop-view-select" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">${viewOptions}</select>
+        <select id="loop-view-select" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">
+          <option value="">${currentLang === 'fr' ? '-- Choisir une vue --' : '-- Choose a view --'}</option>
+        </select>
       </div>
 
       <!-- Linked table options -->
       <div id="linked-table-options" style="display:none;border:1px solid #e5e7eb;padding:10px;border-radius:6px;margin-bottom:10px;background:#fef3c7;">
         <div style="margin-bottom:10px;">
           <label style="display:block;margin-bottom:5px;font-weight:600;">${currentLang === 'fr' ? 'Table à afficher :' : 'Table to display:'}</label>
-          <select id="loop-linked-table" onchange="updateLinkedTableColumns()" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">${tableOptions}</select>
+          <select id="loop-linked-table" onchange="updateLinkedTableColumns()" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">
+            <option value="">${currentLang === 'fr' ? '-- Choisir une table --' : '-- Choose a table --'}</option>
+          </select>
         </div>
         <div style="margin-bottom:10px;">
           <label style="display:block;margin-bottom:5px;font-weight:600;">${currentLang === 'fr' ? 'Colonne de référence (vers ' + selectedTable + ') :' : 'Reference column (to ' + selectedTable + '):'}</label>
@@ -1341,6 +1346,7 @@ function insertTableWithLoop() {
     });
   }, 100);
 }
+
 function editTableLoop(tableElement) {
   if (!editorInstance || !tableElement) return;
 

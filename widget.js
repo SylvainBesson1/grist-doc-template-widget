@@ -922,7 +922,7 @@ function updateLoopValueOptions() {
 // Cache for linked table metadata
 var linkedTableMetadata = {};
 
-aasync function updateLinkedTableColumns() {
+async function updateLinkedTableColumns() {
   var tableSelect = document.getElementById('loop-linked-table');
   var refColSelect = document.getElementById('loop-linked-ref-col');
   var colsContainer = document.getElementById('linked-cols-container');

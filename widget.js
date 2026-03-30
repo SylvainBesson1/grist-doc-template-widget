@@ -717,7 +717,7 @@ function findDisplayColumn(refTable, visibleColId) {
 
 function lookupRefValue(refTable, refId, displayColName) {
   if (!refTable || !refTable.id || !displayColName) return null;
-  
+
   var idx = refTable.id.indexOf(refId);
   if (idx >= 0 && refTable[displayColName]) {
     return refTable[displayColName][idx];
@@ -1557,6 +1557,17 @@ function editTableLoop(tableElement) {
   });
 }
 
+function getRefTableName(refCol) {
+  var meta = columnMetadata[refCol];
+  if (meta && meta.type) {
+    var refMatch = meta.type.match(/^RefList:(.+)$/);
+    if (refMatch) {
+      return refMatch[1];
+    }
+  }
+  return null;
+}
+
 function executeLoopForMultiRef(firstRefCol, secondRefCol, loopContent, forPdf) {
   if (!tableData || !tableData[firstRefCol] || !tableData[secondRefCol]) {
     return '<span style="color:red;">[' + (currentLang === 'fr' ? 'Colonnes non trouvées' : 'Columns not found') + ']</span>';
@@ -1570,16 +1581,16 @@ function executeLoopForMultiRef(firstRefCol, secondRefCol, loopContent, forPdf) 
   if (!Array.isArray(firstRefValues)) firstRefValues = [firstRefValues];
   if (!Array.isArray(secondRefValues)) secondRefValues = [secondRefValues];
 
+  // Obtenir les noms des tables de référence
+  var firstRefTable = getRefTableName(firstRefCol);
+  var secondRefTable = getRefTableName(secondRefCol);
+
   // Parcourir chaque combinaison des deux colonnes de référence multiple
   for (var i = 0; i < firstRefValues.length; i++) {
     for (var j = 0; j < secondRefValues.length; j++) {
       var rowRecord = getRecordAt(currentRecordIndex);
 
       // Résoudre les valeurs des colonnes de référence multiple
-      var firstRefTable = getRefTableName(firstRefCol);
-      var secondRefTable = getRefTableName(secondRefCol);
-
-      // Utiliser une clé unique pour éviter les conflits
       rowRecord['FirstRefValue'] = lookupRefValue(referenceTables[firstRefTable], firstRefValues[i], 'Nom');
       rowRecord['SecondRefValue'] = lookupRefValue(referenceTables[secondRefTable], secondRefValues[j], 'Nom');
 

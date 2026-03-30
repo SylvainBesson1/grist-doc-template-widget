@@ -552,6 +552,17 @@ async function loadViewsForTable(tableName) {
 // REFERENCE RESOLUTION
 // =============================================================================
 
+function getRefTableName(refCol) {
+  var meta = columnMetadata[refCol];
+  if (meta && meta.type) {
+    var refMatch = meta.type.match(/^RefList:(.+)$/);
+    if (refMatch) {
+      return refMatch[1];
+    }
+  }
+  return null;
+}
+
 async function loadColumnMetadata(tableName) {
   columnMetadata = {};
   columnIdToName = {};
@@ -1557,16 +1568,7 @@ function editTableLoop(tableElement) {
   });
 }
 
-function getRefTableName(refCol) {
-  var meta = columnMetadata[refCol];
-  if (meta && meta.type) {
-    var refMatch = meta.type.match(/^RefList:(.+)$/);
-    if (refMatch) {
-      return refMatch[1];
-    }
-  }
-  return null;
-}
+
 
 function executeLoopForMultiRef(firstRefCol, secondRefCol, loopContent, forPdf) {
   if (!tableData || !tableData[firstRefCol] || !tableData[secondRefCol]) {

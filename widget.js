@@ -1990,7 +1990,6 @@ function initEditor() {
               ' + (currentLang === 'fr' ? 'Vous pouvez insérer un tableau dans chaque cellule pour créer des tableaux côte à côte.' : 'You can insert a table in each cell to create side-by-side tables.') + '\
             </div>\
             <div style="display:flex;gap:10px;">\
-              <button id="layout-insert" style="flex:1;padding:10px;background:#3b82f6;color:white;border:none;border-radius:6px;cursor:pointer;">' + (currentLang === 'fr' ? 'Insérer' : 'Insert') + '</button>\
               <button id="layout-cancel" style="flex:1;padding:10px;background:#f1f5f9;border:none;border-radius:6px;cursor:pointer;">' + (currentLang === 'fr' ? 'Annuler' : 'Cancel') + '</button>\
             </div>\
           ';

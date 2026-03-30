@@ -1218,7 +1218,12 @@ function insertTableWithLoop() {
 
   if (mode === 'vertical') {
     cols.forEach(function(col) {
-      var list = currentRecord[col] || [];
+      var listRaw = currentRecord[col] || [];
+      var list = [];
+
+      if (Array.isArray(listRaw)) list = listRaw;
+      else if (typeof listRaw === 'string') list = listRaw.split(',').map(s => s.trim()).filter(Boolean);
+
       list.forEach(function(item) {
         var value = (item && typeof item === 'object') ? (item.Name || item.label || item.id || '') : (item || '');
         var rowHtml = templateRowHtml;
@@ -1227,9 +1232,18 @@ function insertTableWithLoop() {
       });
     });
   }
+
   else if (mode === 'aligned') {
-    var lists = cols.map(c => currentRecord[c] || []);
+
+    var lists = cols.map(function(col) {
+      var listRaw = currentRecord[col] || [];
+      if (Array.isArray(listRaw)) return listRaw;
+      else if (typeof listRaw === 'string') return listRaw.split(',').map(s => s.trim()).filter(Boolean);
+      return [];
+    });
+
     var maxLen = Math.max.apply(null, lists.map(l => l.length || 0));
+
     for (var i = 0; i < maxLen; i++) {
       var rowHtml = templateRowHtml;
       cols.forEach(function(col, idx) {

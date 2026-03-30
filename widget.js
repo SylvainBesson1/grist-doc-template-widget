@@ -718,12 +718,12 @@ function lookupRefValue(refTable, refId, displayColName) {
 
 function renderVariableChips() {
   var html = '';
-  
+
   // Add loop syntax helper chip
   html += '<span class="var-chip" style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d;" onclick="insertLoopSyntax()" title="' + t('loopExample') + '">';
   html += '🔄 ' + t('loopHint');
   html += '</span>';
-  
+
   // Add table with loop helper chip
   html += '<span class="var-chip" style="background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;" onclick="insertTableWithLoop()" title="' + t('tableLoopHint') + '">';
   html += '📊 ' + t('tableLoopBtn');
@@ -908,14 +908,14 @@ function updateLoopValueOptions() {
 // Cache for linked table metadata
 var linkedTableMetadata = {};
 
-async function updateLinkedTableColumns() {
+aasync function updateLinkedTableColumns() {
   var tableSelect = document.getElementById('loop-linked-table');
   var refColSelect = document.getElementById('loop-linked-ref-col');
   var colsContainer = document.getElementById('linked-cols-container');
   var colsCheckboxes = document.getElementById('linked-cols-checkboxes');
-  
+
   if (!tableSelect || !refColSelect || !colsCheckboxes) return;
-  
+
   var linkedTableName = tableSelect.value;
   if (!linkedTableName) {
     refColSelect.innerHTML = '<option value="">' + (currentLang === 'fr' ? '-- Choisir la colonne Ref --' : '-- Choose Ref column --') + '</option>';
@@ -923,12 +923,12 @@ async function updateLinkedTableColumns() {
     if (colsContainer) colsContainer.style.display = 'none';
     return;
   }
-  
+
   try {
     // Fetch column metadata for the linked table
     var colData = await grist.docApi.fetchTable('_grist_Tables_column');
     var tablesData = await grist.docApi.fetchTable('_grist_Tables');
-    
+
     // Find table ID
     var tableId = null;
     for (var i = 0; i < tablesData.id.length; i++) {
@@ -938,7 +938,7 @@ async function updateLinkedTableColumns() {
       }
     }
     if (!tableId) return;
-    
+
     // Get columns for this table
     var linkedCols = [];
     var refCols = [];
@@ -946,19 +946,19 @@ async function updateLinkedTableColumns() {
       if (colData.parentId[i] === tableId) {
         var colId = colData.colId[i];
         var colType = colData.type[i];
-        
+
         // Skip internal columns
         if (colId.startsWith('gristHelper_') || colId === 'manualSort') continue;
-        
+
         linkedCols.push(colId);
-        
+
         // Check if it's a Ref column pointing to the selected table
         if (colType && colType.startsWith('Ref:') && colType === 'Ref:' + selectedTable) {
           refCols.push(colId);
         }
       }
     }
-    
+
     // Populate reference column dropdown
     refColSelect.innerHTML = '<option value="">' + (currentLang === 'fr' ? '-- Choisir la colonne Ref --' : '-- Choose Ref column --') + '</option>';
     for (var r = 0; r < refCols.length; r++) {
@@ -967,7 +967,7 @@ async function updateLinkedTableColumns() {
       opt.textContent = refCols[r] + ' (→ ' + selectedTable + ')';
       refColSelect.appendChild(opt);
     }
-    
+
     // If no ref columns found, show a message
     if (refCols.length === 0) {
       var noRefOpt = document.createElement('option');
@@ -975,7 +975,7 @@ async function updateLinkedTableColumns() {
       noRefOpt.textContent = currentLang === 'fr' ? '⚠️ Aucune colonne Ref vers ' + selectedTable : '⚠️ No Ref column to ' + selectedTable;
       refColSelect.appendChild(noRefOpt);
     }
-    
+
     // Populate columns checkboxes
     colsCheckboxes.innerHTML = '';
     for (var c = 0; c < linkedCols.length; c++) {
@@ -985,12 +985,8 @@ async function updateLinkedTableColumns() {
       label.innerHTML = '<input type="checkbox" value="' + linkedCols[c] + '" ' + checked + ' style="margin-right:8px;">' + linkedCols[c];
       colsCheckboxes.appendChild(label);
     }
-    
+
     if (colsContainer) colsContainer.style.display = 'block';
-    
-    // Cache metadata
-    linkedTableMetadata[linkedTableName] = { columns: linkedCols, refColumns: refCols };
-    
   } catch (error) {
     console.error('Error loading linked table columns:', error);
   }
@@ -1080,6 +1076,271 @@ function updateEditLoopValueOptions() {
   }
 }
 
+function insertTableWithLoop() {
+  if (!editorInstance) return;
+
+  // Restore cursor position if it was saved
+  restoreEditorSelection();
+
+  // Build column selector options
+  var colOptions = '';
+  for (var i = 0; i < tableColumns.length; i++) {
+    colOptions += '<option value="' + tableColumns[i] + '">' + tableColumns[i] + '</option>';
+  }
+
+  // Build view selector options
+  var viewOptions = '<option value="">' + (currentLang === 'fr' ? '-- Choisir une vue --' : '-- Choose a view --') + '</option>';
+  for (var v = 0; v < availableViews.length; v++) {
+    var viewName = availableViews[v].name;
+    var viewId = availableViews[v].id;
+    var hasFilters = availableViews[v].filters ? ' 🔍' : '';
+    viewOptions += '<option value="' + viewId + '">' + viewName + hasFilters + '</option>';
+  }
+
+  // Build table selector options (all tables except current)
+  var tableOptions = '<option value="">' + (currentLang === 'fr' ? '-- Choisir une table --' : '-- Choose a table --') + '</option>';
+  for (var t = 0; t < allTables.length; t++) {
+    if (allTables[t] !== selectedTable) {
+      tableOptions += '<option value="' + allTables[t] + '">' + allTables[t] + '</option>';
+    }
+  }
+
+  var formHtml = `
+    <div style="text-align:left;">
+      <div style="margin-bottom:15px;">
+        <label style="display:block;margin-bottom:8px;font-weight:600;">${currentLang === 'fr' ? 'Type de tableau :' : 'Table type:'}</label>
+        <label style="display:block;margin-bottom:5px;cursor:pointer;">
+          <input type="radio" name="loop-type" value="view" checked style="margin-right:8px;">
+          ${currentLang === 'fr' ? 'Lié à la vue courante' : 'Linked to current view'}
+        </label>
+        <label style="display:block;margin-bottom:5px;cursor:pointer;">
+          <input type="radio" name="loop-type" value="viewselect" style="margin-right:8px;">
+          ${currentLang === 'fr' ? 'Lié à une vue filtrée' : 'Linked to a filtered view'}
+        </label>
+        <label style="display:block;margin-bottom:5px;cursor:pointer;">
+          <input type="radio" name="loop-type" value="linkedtable" style="margin-right:8px;">
+          ${currentLang === 'fr' ? 'Lié à une table externe' : 'Linked to external table'}
+        </label>
+        <label style="display:block;margin-bottom:5px;cursor:pointer;">
+          <input type="radio" name="loop-type" value="filter" style="margin-right:8px;">
+          ${currentLang === 'fr' ? 'Avec filtre manuel' : 'With manual filter'}
+        </label>
+        <label style="display:block;margin-bottom:5px;cursor:pointer;">
+          <input type="radio" name="loop-type" value="multiref" style="margin-right:8px;">
+          ${currentLang === 'fr' ? 'Deux colonnes de référence multiple' : 'Two multiple reference columns'}
+        </label>
+      </div>
+
+      <!-- View-select options -->
+      <div id="view-select-options" style="display:none;border:1px solid #e5e7eb;padding:10px;border-radius:6px;margin-bottom:10px;background:#f0fdf4;">
+        <label style="display:block;margin-bottom:5px;font-weight:600;">${currentLang === 'fr' ? 'Vue à utiliser :' : 'View to use:'}</label>
+        <select id="loop-view-select" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">${viewOptions}</select>
+      </div>
+
+      <!-- Linked table options -->
+      <div id="linked-table-options" style="display:none;border:1px solid #e5e7eb;padding:10px;border-radius:6px;margin-bottom:10px;background:#fef3c7;">
+        <div style="margin-bottom:10px;">
+          <label style="display:block;margin-bottom:5px;font-weight:600;">${currentLang === 'fr' ? 'Table à afficher :' : 'Table to display:'}</label>
+          <select id="loop-linked-table" onchange="updateLinkedTableColumns()" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">${tableOptions}</select>
+        </div>
+        <div style="margin-bottom:10px;">
+          <label style="display:block;margin-bottom:5px;font-weight:600;">${currentLang === 'fr' ? 'Colonne de référence (vers ' + selectedTable + ') :' : 'Reference column (to ' + selectedTable + '):'}</label>
+          <select id="loop-linked-ref-col" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">
+            <option value="">${currentLang === 'fr' ? '-- Choisir la colonne Ref --' : '-- Choose Ref column --'}</option>
+          </select>
+        </div>
+        <div id="linked-cols-container" style="display:none;">
+          <label style="display:block;margin-bottom:5px;font-weight:600;">${currentLang === 'fr' ? 'Colonnes à afficher :' : 'Columns to display:'}</label>
+          <div id="linked-cols-checkboxes" style="max-height:120px;overflow-y:auto;border:1px solid #eee;padding:8px;border-radius:4px;background:white;"></div>
+        </div>
+      </div>
+
+      <!-- Filter options -->
+      <div id="filter-options" style="display:none;border:1px solid #e5e7eb;padding:10px;border-radius:6px;margin-bottom:10px;background:#f9fafb;">
+        <div style="margin-bottom:10px;">
+          <label style="display:block;margin-bottom:5px;font-weight:600;">${currentLang === 'fr' ? 'Colonne à filtrer :' : 'Column to filter:'}</label>
+          <select id="loop-filter-col" onchange="updateLoopValueOptions()" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">${colOptions}</select>
+        </div>
+        <div style="margin-bottom:10px;">
+          <label style="display:block;margin-bottom:5px;font-weight:600;">${currentLang === 'fr' ? 'Valeur à rechercher :' : 'Value to search:'}</label>
+          <select id="loop-filter-val-select" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;margin-bottom:5px;">
+            <option value="">${currentLang === 'fr' ? '-- Choisir une valeur --' : '-- Choose a value --'}</option>
+          </select>
+          <input type="text" id="loop-filter-val" placeholder="${currentLang === 'fr' ? 'Ou saisir manuellement...' : 'Or type manually...'}" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;box-sizing:border-box;">
+        </div>
+      </div>
+
+      <!-- Two multiple reference columns options -->
+      <div id="multiref-options" style="display:none;border:1px solid #e5e7eb;padding:10px;border-radius:6px;margin-bottom:10px;background:#e0f2fe;">
+        <div style="margin-bottom:10px;">
+          <label style="display:block;margin-bottom:5px;font-weight:600;">${currentLang === 'fr' ? 'Première colonne de référence multiple :' : 'First multiple reference column:'}</label>
+          <select id="loop-first-ref-col" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">${colOptions}</select>
+        </div>
+        <div style="margin-bottom:10px;">
+          <label style="display:block;margin-bottom:5px;font-weight:600;">${currentLang === 'fr' ? 'Deuxième colonne de référence multiple :' : 'Second multiple reference column:'}</label>
+          <select id="loop-second-ref-col" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">${colOptions}</select>
+        </div>
+      </div>
+
+      <!-- Columns to display (common to all types) -->
+      <div style="margin-bottom:10px;">
+        <label style="display:block;margin-bottom:5px;font-weight:600;">${currentLang === 'fr' ? 'Colonnes à afficher :' : 'Columns to display:'}</label>
+        <div id="loop-cols-checkboxes" style="max-height:150px;overflow-y:auto;border:1px solid #eee;padding:8px;border-radius:4px;">`;
+
+  // Add checkboxes for columns to display
+  for (var j = 0; j < tableColumns.length; j++) {
+    var checked = j < 5 ? 'checked' : '';
+    formHtml += `
+      <label style="display:block;margin-bottom:5px;cursor:pointer;">
+        <input type="checkbox" value="${tableColumns[j]}" ${checked} style="margin-right:8px;">${tableColumns[j]}
+      </label>`;
+  }
+
+  formHtml += `
+        </div>
+      </div>
+    </div>`;
+
+  // Show modal
+  showModal(currentLang === 'fr' ? '📊 Tableau avec boucle' : '📊 Table with loop', formHtml).then(function(confirmed) {
+    if (!confirmed) return;
+
+    // Check which type is selected
+    var loopType = document.querySelector('input[name="loop-type"]:checked');
+    var loopTypeValue = loopType ? loopType.value : 'view';
+
+    var filterCol = '';
+    var filterVal = '';
+    var selectedViewId = '';
+    var linkedTableName = '';
+    var linkedRefCol = '';
+    var firstRefCol = '';
+    var secondRefCol = '';
+
+    // Get selected columns to display
+    var checkboxes = document.querySelectorAll('#loop-cols-checkboxes input[type="checkbox"]:checked');
+    var selectedCols = [];
+    checkboxes.forEach(function(cb) { selectedCols.push(cb.value); });
+
+    if (selectedCols.length === 0) {
+      selectedCols = tableColumns.slice(0, 5);
+    }
+
+    if (loopTypeValue === 'filter') {
+      filterCol = document.getElementById('loop-filter-col').value;
+      // Use dropdown value if selected, otherwise use text input
+      var filterValSelect = document.getElementById('loop-filter-val-select');
+      var filterValInput = document.getElementById('loop-filter-val');
+      filterVal = (filterValSelect && filterValSelect.value) || (filterValInput && filterValInput.value) || (currentLang === 'fr' ? 'Valeur' : 'Value');
+    } else if (loopTypeValue === 'viewselect') {
+      var viewSelect = document.getElementById('loop-view-select');
+      selectedViewId = viewSelect ? viewSelect.value : '';
+    } else if (loopTypeValue === 'linkedtable') {
+      var linkedTableSelect = document.getElementById('loop-linked-table');
+      var linkedRefColSelect = document.getElementById('loop-linked-ref-col');
+      linkedTableName = linkedTableSelect ? linkedTableSelect.value : '';
+      linkedRefCol = linkedRefColSelect ? linkedRefColSelect.value : '';
+    } else if (loopTypeValue === 'multiref') {
+      var firstRefColSelect = document.getElementById('loop-first-ref-col');
+      var secondRefColSelect = document.getElementById('loop-second-ref-col');
+      firstRefCol = firstRefColSelect ? firstRefColSelect.value : '';
+      secondRefCol = secondRefColSelect ? secondRefColSelect.value : '';
+    }
+
+    // Build table HTML
+    var headerCells = '';
+    var dataCells = '';
+    for (var k = 0; k < selectedCols.length; k++) {
+      headerCells += '<th style="border:1px solid #ccc;padding:8px;background:#f3f4f6;">' + selectedCols[k] + '</th>';
+      dataCells += '<td style="border:1px solid #ccc;padding:8px;">{{' + selectedCols[k] + '}}</td>';
+    }
+
+    var tableHtml;
+    if (loopTypeValue === 'view') {
+      // View-linked table: uses <!--LOOP:*--> to show all rows from the current view
+      tableHtml = '<table style="border-collapse:collapse;width:100%;margin:10px 0;">' +
+        '<thead><tr>' + headerCells + '</tr></thead>' +
+        '<tbody>' +
+        '<!--LOOP:*-->' +
+        '<tr>' + dataCells + '</tr>' +
+        '<!--/LOOP-->' +
+        '</tbody>' +
+        '</table>';
+    } else if (loopTypeValue === 'viewselect' && selectedViewId) {
+      // View-select table: uses <!--LOOP:VIEW:viewId--> to show rows from selected view
+      tableHtml = '<table style="border-collapse:collapse;width:100%;margin:10px 0;">' +
+        '<thead><tr>' + headerCells + '</tr></thead>' +
+        '<tbody>' +
+        '<!--LOOP:VIEW:' + selectedViewId + '-->' +
+        '<tr>' + dataCells + '</tr>' +
+        '<!--/LOOP-->' +
+        '</tbody>' +
+        '</table>';
+    } else if (loopTypeValue === 'linkedtable' && linkedTableName && linkedRefCol) {
+      // Linked table: uses <!--LOOP:TABLE:tableName:refColumn--> to show rows from linked table
+      tableHtml = '<table style="border-collapse:collapse;width:100%;margin:10px 0;">' +
+        '<thead><tr>' + headerCells + '</tr></thead>' +
+        '<tbody>' +
+        '<!--LOOP:TABLE:' + linkedTableName + ':' + linkedRefCol + '-->' +
+        '<tr>' + dataCells + '</tr>' +
+        '<!--/LOOP-->' +
+        '</tbody>' +
+        '</table>';
+    } else if (loopTypeValue === 'multiref' && firstRefCol && secondRefCol) {
+      // Two multiple reference columns: uses <!--LOOP:MULTIREF:col1:col2--> to show combinations
+      tableHtml = '<table style="border-collapse:collapse;width:100%;margin:10px 0;">' +
+        '<thead><tr>' + headerCells + '</tr></thead>' +
+        '<tbody>' +
+        '<!--LOOP:MULTIREF:' + firstRefCol + ':' + secondRefCol + '-->' +
+        '<tr>' + dataCells + '</tr>' +
+        '<!--/LOOP-->' +
+        '</tbody>' +
+        '</table>';
+    } else {
+      // Filtered table
+      tableHtml = '<table style="border-collapse:collapse;width:100%;margin:10px 0;">' +
+        '<thead><tr>' + headerCells + '</tr></thead>' +
+        '<tbody>' +
+        '<!--LOOP:' + filterCol + '=' + filterVal + '-->' +
+        '<tr>' + dataCells + '</tr>' +
+        '<!--/LOOP-->' +
+        '</tbody>' +
+        '</table>';
+    }
+
+    editorInstance.selection.insertHTML(tableHtml);
+    showToast(currentLang === 'fr' ? 'Tableau avec boucle inséré' : 'Table with loop inserted', 'info');
+  });
+
+  // Add event listeners for radio buttons after modal opens
+  setTimeout(function() {
+    var radios = document.querySelectorAll('input[name="loop-type"]');
+    radios.forEach(function(radio) {
+      radio.addEventListener('change', function() {
+        var filterOptions = document.getElementById('filter-options');
+        var viewSelectOptions = document.getElementById('view-select-options');
+        var linkedTableOptions = document.getElementById('linked-table-options');
+        var multirefOptions = document.getElementById('multiref-options');
+
+        if (filterOptions) {
+          filterOptions.style.display = this.value === 'filter' ? 'block' : 'none';
+        }
+        if (viewSelectOptions) {
+          viewSelectOptions.style.display = this.value === 'viewselect' ? 'block' : 'none';
+        }
+        if (linkedTableOptions) {
+          linkedTableOptions.style.display = this.value === 'linkedtable' ? 'block' : 'none';
+          if (this.value === 'linkedtable') {
+            updateLinkedTableColumns();
+          }
+        }
+        if (multirefOptions) {
+          multirefOptions.style.display = this.value === 'multiref' ? 'block' : 'none';
+        }
+      });
+    });
+  }, 100);
+}
 function editTableLoop(tableElement) {
   if (!editorInstance || !tableElement) return;
 

@@ -1018,6 +1018,7 @@ function getRefTableName(refCol) {
   }
   return null;
 }
+
 async function updateEditLinkedTableColumns() {
   var tableSelect = document.getElementById('edit-linked-table');
   var refColSelect = document.getElementById('edit-linked-ref-col');
@@ -1108,7 +1109,6 @@ function insertTableWithLoop() {
     return;
   }
 
-  // Restore cursor position if it was saved
   restoreEditorSelection();
 
   // Build column selector options
@@ -1117,7 +1117,6 @@ function insertTableWithLoop() {
     colOptions += '<option value="' + tableColumns[i] + '">' + tableColumns[i] + '</option>';
   }
 
-  // Build form HTML
   var formHtml = `
     <div style="text-align:left;">
       <div style="margin-bottom:15px;">
@@ -1127,75 +1126,18 @@ function insertTableWithLoop() {
           ${currentLang === 'fr' ? 'Lié à la vue courante' : 'Linked to current view'}
         </label>
         <label style="display:block;margin-bottom:5px;cursor:pointer;">
-          <input type="radio" name="loop-type" value="viewselect" style="margin-right:8px;">
-          ${currentLang === 'fr' ? 'Lié à une vue filtrée' : 'Linked to a filtered view'}
-        </label>
-        <label style="display:block;margin-bottom:5px;cursor:pointer;">
-          <input type="radio" name="loop-type" value="linkedtable" style="margin-right:8px;">
-          ${currentLang === 'fr' ? 'Lié à une table externe' : 'Linked to external table'}
-        </label>
-        <label style="display:block;margin-bottom:5px;cursor:pointer;">
-          <input type="radio" name="loop-type" value="filter" style="margin-right:8px;">
-          ${currentLang === 'fr' ? 'Avec filtre manuel' : 'With manual filter'}
-        </label>
-        <label style="display:block;margin-bottom:5px;cursor:pointer;">
           <input type="radio" name="loop-type" value="multiref" style="margin-right:8px;">
-          ${currentLang === 'fr' ? 'Deux colonnes de référence multiple' : 'Two multiple reference columns'}
+          ${currentLang === 'fr' ? 'Colonnes de référence multiple' : 'Multiple reference columns'}
         </label>
       </div>
 
-      <!-- View-select options -->
-      <div id="view-select-options" style="display:none;border:1px solid #e5e7eb;padding:10px;border-radius:6px;margin-bottom:10px;background:#f0fdf4;">
-        <label style="display:block;margin-bottom:5px;font-weight:600;">${currentLang === 'fr' ? 'Vue à utiliser :' : 'View to use:'}</label>
-        <select id="loop-view-select" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">
-          <option value="">${currentLang === 'fr' ? '-- Choisir une vue --' : '-- Choose a view --'}</option>
-        </select>
-      </div>
-
-      <!-- Linked table options -->
-      <div id="linked-table-options" style="display:none;border:1px solid #e5e7eb;padding:10px;border-radius:6px;margin-bottom:10px;background:#fef3c7;">
-        <div style="margin-bottom:10px;">
-          <label style="display:block;margin-bottom:5px;font-weight:600;">${currentLang === 'fr' ? 'Table à afficher :' : 'Table to display:'}</label>
-          <select id="loop-linked-table" onchange="updateLinkedTableColumns()" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">
-            <option value="">${currentLang === 'fr' ? '-- Choisir une table --' : '-- Choose a table --'}</option>
-          </select>
-        </div>
-        <div style="margin-bottom:10px;">
-          <label style="display:block;margin-bottom:5px;font-weight:600;">${currentLang === 'fr' ? 'Colonne de référence (vers ' + selectedTable + ') :' : 'Reference column (to ' + selectedTable + '):'}</label>
-          <select id="loop-linked-ref-col" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">
-            <option value="">${currentLang === 'fr' ? '-- Choisir la colonne Ref --' : '-- Choose Ref column --'}</option>
-          </select>
-        </div>
-        <div id="linked-cols-container" style="display:none;">
-          <label style="display:block;margin-bottom:5px;font-weight:600;">${currentLang === 'fr' ? 'Colonnes à afficher :' : 'Columns to display:'}</label>
-          <div id="linked-cols-checkboxes" style="max-height:120px;overflow-y:auto;border:1px solid #eee;padding:8px;border-radius:4px;background:white;"></div>
-        </div>
-      </div>
-
-      <!-- Filter options -->
-      <div id="filter-options" style="display:none;border:1px solid #e5e7eb;padding:10px;border-radius:6px;margin-bottom:10px;background:#f9fafb;">
-        <div style="margin-bottom:10px;">
-          <label style="display:block;margin-bottom:5px;font-weight:600;">${currentLang === 'fr' ? 'Colonne à filtrer :' : 'Column to filter:'}</label>
-          <select id="loop-filter-col" onchange="updateLoopValueOptions()" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">${colOptions}</select>
-        </div>
-        <div style="margin-bottom:10px;">
-          <label style="display:block;margin-bottom:5px;font-weight:600;">${currentLang === 'fr' ? 'Valeur à rechercher :' : 'Value to search:'}</label>
-          <select id="loop-filter-val-select" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;margin-bottom:5px;">
-            <option value="">${currentLang === 'fr' ? '-- Choisir une valeur --' : '-- Choose a value --'}</option>
-          </select>
-          <input type="text" id="loop-filter-val" placeholder="${currentLang === 'fr' ? 'Ou saisir manuellement...' : 'Or type manually...'}" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;box-sizing:border-box;">
-        </div>
-      </div>
-
-      <!-- Two multiple reference columns options -->
+      <!-- Multiple reference columns options -->
       <div id="multiref-options" style="display:none;border:1px solid #e5e7eb;padding:10px;border-radius:6px;margin-bottom:10px;background:#e0f2fe;">
         <div style="margin-bottom:10px;">
-          <label style="display:block;margin-bottom:5px;font-weight:600;">${currentLang === 'fr' ? 'Première colonne de référence multiple :' : 'First multiple reference column:'}</label>
-          <select id="loop-first-ref-col" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">${colOptions}</select>
-        </div>
-        <div style="margin-bottom:10px;">
-          <label style="display:block;margin-bottom:5px;font-weight:600;">${currentLang === 'fr' ? 'Deuxième colonne de référence multiple :' : 'Second multiple reference column:'}</label>
-          <select id="loop-second-ref-col" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">${colOptions}</select>
+          <label style="display:block;margin-bottom:5px;font-weight:600;">${currentLang === 'fr' ? 'Colonnes de référence multiple :' : 'Multiple reference columns:'}</label>
+          <div id="multiref-cols-container" style="max-height:150px;overflow-y:auto;border:1px solid #eee;padding:8px;border-radius:4px;background:white;">
+            ${colOptions.replace(/<option/g, '<label style="display:block;margin-bottom:5px;cursor:pointer;"><input type="checkbox" name="multiref-col" value="').replace(/<\/option>/g, '" style="margin-right:8px;">')}
+          </div>
         </div>
       </div>
 
@@ -1204,7 +1146,6 @@ function insertTableWithLoop() {
         <label style="display:block;margin-bottom:5px;font-weight:600;">${currentLang === 'fr' ? 'Colonnes à afficher :' : 'Columns to display:'}</label>
         <div id="loop-cols-checkboxes" style="max-height:150px;overflow-y:auto;border:1px solid #eee;padding:8px;border-radius:4px;">`;
 
-  // Add checkboxes for columns to display
   for (var j = 0; j < tableColumns.length; j++) {
     var checked = j < 5 ? 'checked' : '';
     formHtml += `
@@ -1218,53 +1159,20 @@ function insertTableWithLoop() {
       </div>
     </div>`;
 
-  // Show modal
   showModal(currentLang === 'fr' ? '📊 Tableau avec boucle' : '📊 Table with loop', formHtml).then(function(confirmed) {
     if (!confirmed) return;
 
-    // Check which type is selected
     var loopType = document.querySelector('input[name="loop-type"]:checked');
     var loopTypeValue = loopType ? loopType.value : 'view';
 
-    var filterCol = '';
-    var filterVal = '';
-    var selectedViewId = '';
-    var linkedTableName = '';
-    var linkedRefCol = '';
-    var firstRefCol = '';
-    var secondRefCol = '';
-
-    // Get selected columns to display
-    var checkboxes = document.querySelectorAll('#loop-cols-checkboxes input[type="checkbox"]:checked');
     var selectedCols = [];
+    var checkboxes = document.querySelectorAll('#loop-cols-checkboxes input[type="checkbox"]:checked');
     checkboxes.forEach(function(cb) { selectedCols.push(cb.value); });
 
     if (selectedCols.length === 0) {
       selectedCols = tableColumns.slice(0, 5);
     }
 
-    if (loopTypeValue === 'filter') {
-      filterCol = document.getElementById('loop-filter-col').value;
-      // Use dropdown value if selected, otherwise use text input
-      var filterValSelect = document.getElementById('loop-filter-val-select');
-      var filterValInput = document.getElementById('loop-filter-val');
-      filterVal = (filterValSelect && filterValSelect.value) || (filterValInput && filterValInput.value) || (currentLang === 'fr' ? 'Valeur' : 'Value');
-    } else if (loopTypeValue === 'viewselect') {
-      var viewSelect = document.getElementById('loop-view-select');
-      selectedViewId = viewSelect ? viewSelect.value : '';
-    } else if (loopTypeValue === 'linkedtable') {
-      var linkedTableSelect = document.getElementById('loop-linked-table');
-      var linkedRefColSelect = document.getElementById('loop-linked-ref-col');
-      linkedTableName = linkedTableSelect ? linkedTableSelect.value : '';
-      linkedRefCol = linkedRefColSelect ? linkedRefColSelect.value : '';
-    } else if (loopTypeValue === 'multiref') {
-      var firstRefColSelect = document.getElementById('loop-first-ref-col');
-      var secondRefColSelect = document.getElementById('loop-second-ref-col');
-      firstRefCol = firstRefColSelect ? firstRefColSelect.value : '';
-      secondRefCol = secondRefColSelect ? secondRefColSelect.value : '';
-    }
-
-    // Build table HTML
     var headerCells = '';
     var dataCells = '';
     for (var k = 0; k < selectedCols.length; k++) {
@@ -1274,7 +1182,6 @@ function insertTableWithLoop() {
 
     var tableHtml;
     if (loopTypeValue === 'view') {
-      // View-linked table: uses <!--LOOP:*--> to show all rows from the current view
       tableHtml = '<table style="border-collapse:collapse;width:100%;margin:10px 0;">' +
         '<thead><tr>' + headerCells + '</tr></thead>' +
         '<tbody>' +
@@ -1283,42 +1190,20 @@ function insertTableWithLoop() {
         '<!--/LOOP-->' +
         '</tbody>' +
         '</table>';
-    } else if (loopTypeValue === 'viewselect' && selectedViewId) {
-      // View-select table: uses <!--LOOP:VIEW:viewId--> to show rows from selected view
+    } else if (loopTypeValue === 'multiref') {
+      var multirefCols = [];
+      var multirefCheckboxes = document.querySelectorAll('input[name="multiref-col"]:checked');
+      multirefCheckboxes.forEach(function(cb) { multirefCols.push(cb.value); });
+
+      if (multirefCols.length === 0) {
+        showToast(currentLang === 'fr' ? 'Veuillez sélectionner au moins une colonne de référence multiple.' : 'Please select at least one multiple reference column.', 'error');
+        return;
+      }
+
       tableHtml = '<table style="border-collapse:collapse;width:100%;margin:10px 0;">' +
         '<thead><tr>' + headerCells + '</tr></thead>' +
         '<tbody>' +
-        '<!--LOOP:VIEW:' + selectedViewId + '-->' +
-        '<tr>' + dataCells + '</tr>' +
-        '<!--/LOOP-->' +
-        '</tbody>' +
-        '</table>';
-    } else if (loopTypeValue === 'linkedtable' && linkedTableName && linkedRefCol) {
-      // Linked table: uses <!--LOOP:TABLE:tableName:refColumn--> to show rows from linked table
-      tableHtml = '<table style="border-collapse:collapse;width:100%;margin:10px 0;">' +
-        '<thead><tr>' + headerCells + '</tr></thead>' +
-        '<tbody>' +
-        '<!--LOOP:TABLE:' + linkedTableName + ':' + linkedRefCol + '-->' +
-        '<tr>' + dataCells + '</tr>' +
-        '<!--/LOOP-->' +
-        '</tbody>' +
-        '</table>';
-    } else if (loopTypeValue === 'multiref' && firstRefCol && secondRefCol) {
-      // Two multiple reference columns: uses <!--LOOP:MULTIREF:col1:col2--> to show combinations
-      tableHtml = '<table style="border-collapse:collapse;width:100%;margin:10px 0;">' +
-        '<thead><tr>' + headerCells + '</tr></thead>' +
-        '<tbody>' +
-        '<!--LOOP:MULTIREF:' + firstRefCol + ':' + secondRefCol + '-->' +
-        '<tr>' + dataCells + '</tr>' +
-        '<!--/LOOP-->' +
-        '</tbody>' +
-        '</table>';
-    } else {
-      // Filtered table
-      tableHtml = '<table style="border-collapse:collapse;width:100%;margin:10px 0;">' +
-        '<thead><tr>' + headerCells + '</tr></thead>' +
-        '<tbody>' +
-        '<!--LOOP:' + filterCol + '=' + filterVal + '-->' +
+        '<!--LOOP:MULTIREF:' + multirefCols.join(':') + '-->' +
         '<tr>' + dataCells + '</tr>' +
         '<!--/LOOP-->' +
         '</tbody>' +
@@ -1329,28 +1214,11 @@ function insertTableWithLoop() {
     showToast(currentLang === 'fr' ? 'Tableau avec boucle inséré' : 'Table with loop inserted', 'info');
   });
 
-  // Add event listeners for radio buttons after modal opens
   setTimeout(function() {
     var radios = document.querySelectorAll('input[name="loop-type"]');
     radios.forEach(function(radio) {
       radio.addEventListener('change', function() {
-        var filterOptions = document.getElementById('filter-options');
-        var viewSelectOptions = document.getElementById('view-select-options');
-        var linkedTableOptions = document.getElementById('linked-table-options');
         var multirefOptions = document.getElementById('multiref-options');
-
-        if (filterOptions) {
-          filterOptions.style.display = this.value === 'filter' ? 'block' : 'none';
-        }
-        if (viewSelectOptions) {
-          viewSelectOptions.style.display = this.value === 'viewselect' ? 'block' : 'none';
-        }
-        if (linkedTableOptions) {
-          linkedTableOptions.style.display = this.value === 'linkedtable' ? 'block' : 'none';
-          if (this.value === 'linkedtable') {
-            updateLinkedTableColumns();
-          }
-        }
         if (multirefOptions) {
           multirefOptions.style.display = this.value === 'multiref' ? 'block' : 'none';
         }
@@ -1571,69 +1439,89 @@ function editTableLoop(tableElement) {
 
 
 
-function executeLoopForMultiRef(firstRefCol, secondRefCol, loopContent, forPdf) {
-  if (!tableData || !tableData[firstRefCol] || !tableData[secondRefCol]) {
+function executeLoopForMultiRef(multirefCols, loopContent, forPdf) {
+  if (!tableData || !multirefCols) {
     return '<span style="color:red;">[' + (currentLang === 'fr' ? 'Colonnes non trouvées' : 'Columns not found') + ']</span>';
   }
 
+  var multirefColsArray = multirefCols.split(':');
   var output = '';
-  var firstRefValues = tableData[firstRefCol][currentRecordIndex] || [];
-  var secondRefValues = tableData[secondRefCol][currentRecordIndex] || [];
 
-  // Si les colonnes sont des références multiples, elles sont des tableaux d'IDs
-  if (!Array.isArray(firstRefValues)) firstRefValues = [firstRefValues];
-  if (!Array.isArray(secondRefValues)) secondRefValues = [secondRefValues];
+  // Générer toutes les combinaisons possibles des références multiples
+  var combinations = generateCombinations(multirefColsArray);
 
-  // Obtenir les noms des tables de référence
-  var firstRefTable = getRefTableName(firstRefCol);
-  var secondRefTable = getRefTableName(secondRefCol);
+  for (var i = 0; i < combinations.length; i++) {
+    var rowRecord = getRecordAt(currentRecordIndex);
 
-  // Parcourir chaque combinaison des deux colonnes de référence multiple
-  for (var i = 0; i < firstRefValues.length; i++) {
-    for (var j = 0; j < secondRefValues.length; j++) {
-      var rowRecord = getRecordAt(currentRecordIndex);
+    for (var j = 0; j < multirefColsArray.length; j++) {
+      var colName = multirefColsArray[j];
+      var refTable = getRefTableName(colName);
+      var refValue = combinations[i][j];
+      if (refValue) {
+        rowRecord[colName] = lookupRefValue(referenceTables[refTable], refValue, 'Nom');
+      }
+    }
 
-      // Résoudre les valeurs des colonnes de référence multiple
-      rowRecord['FirstRefValue'] = lookupRefValue(referenceTables[firstRefTable], firstRefValues[i], 'Nom');
-      rowRecord['SecondRefValue'] = lookupRefValue(referenceTables[secondRefTable], secondRefValues[j], 'Nom');
+    // Résoudre les variables dans loopContent pour cette ligne
+    var rowHtml = loopContent;
+    for (var col in rowRecord) {
+      var val = rowRecord[col];
+      var display = formatValueForDisplay(val);
 
-      // Résoudre les variables dans loopContent pour cette ligne
-      var rowHtml = loopContent;
-      for (var col in rowRecord) {
-        var val = rowRecord[col];
-        var display = formatValueForDisplay(val);
-
-        // Remplacer les variables
-        var styledRegex = new RegExp('<span[^>]*>\\{\\{' + escapeRegex(col) + '\\}\\}</span>', 'g');
-        if (display) {
-          if (forPdf) {
-            rowHtml = rowHtml.replace(styledRegex, sanitize(display));
-          } else {
-            rowHtml = rowHtml.replace(styledRegex, '<span class="var-resolved">' + sanitize(display) + '</span>');
-          }
+      // Remplacer les variables
+      var styledRegex = new RegExp('<span[^>]*>\\{\\{' + escapeRegex(col) + '\\}\\}</span>', 'g');
+      if (display) {
+        if (forPdf) {
+          rowHtml = rowHtml.replace(styledRegex, sanitize(display));
         } else {
-          rowHtml = rowHtml.replace(styledRegex, '');
+          rowHtml = rowHtml.replace(styledRegex, '<span class="var-resolved">' + sanitize(display) + '</span>');
         }
-
-        var plainRegex = new RegExp('\\{\\{' + escapeRegex(col) + '\\}\\}', 'g');
-        if (display) {
-          if (forPdf) {
-            rowHtml = rowHtml.replace(plainRegex, sanitize(display));
-          } else {
-            rowHtml = rowHtml.replace(plainRegex, '<span class="var-resolved">' + sanitize(display) + '</span>');
-          }
-        } else {
-          rowHtml = rowHtml.replace(plainRegex, '');
-        }
+      } else {
+        rowHtml = rowHtml.replace(styledRegex, '');
       }
 
-      // Résoudre les images pour cette ligne
-      rowHtml = resolveImagesInHtml(rowHtml, rowRecord, forPdf);
-      output += rowHtml;
+      var plainRegex = new RegExp('\\{\\{' + escapeRegex(col) + '\\}\\}', 'g');
+      if (display) {
+        if (forPdf) {
+          rowHtml = rowHtml.replace(plainRegex, sanitize(display));
+        } else {
+          rowHtml = rowHtml.replace(plainRegex, '<span class="var-resolved">' + sanitize(display) + '</span>');
+        }
+      } else {
+        rowHtml = rowHtml.replace(plainRegex, '');
+      }
     }
+
+    // Résoudre les images pour cette ligne
+    rowHtml = resolveImagesInHtml(rowHtml, rowRecord, forPdf);
+    output += rowHtml;
   }
 
   return output;
+}
+
+// Fonction utilitaire pour générer toutes les combinaisons possibles des références multiples
+function generateCombinations(multirefCols) {
+  var combinations = [[]];
+
+  for (var i = 0; i < multirefCols.length; i++) {
+    var colName = multirefCols[i];
+    var refValues = tableData[colName][currentRecordIndex] || [];
+
+    if (!Array.isArray(refValues)) refValues = [refValues];
+
+    var temp = [];
+    for (var j = 0; j < combinations.length; j++) {
+      for (var k = 0; k < refValues.length; k++) {
+        var newCombination = combinations[j].slice();
+        newCombination.push(refValues[k]);
+        temp.push(newCombination);
+      }
+    }
+    combinations = temp;
+  }
+
+  return combinations;
 }
 // Store last cursor position before clicking outside editor
 var lastEditorRange = null;
@@ -3694,6 +3582,12 @@ async function processLoopsAsync(html, forPdf) {
   if (!tableData || !tableColumns.length) return html;
   
   var resolved = html;
+  
+  // Traitement des boucles imbriquées pour plusieurs colonnes de référence multiple
+  var multiRefLoopRegex = /<!--LOOP:MULTIREF:([^>]+)-->([\s\S]*?)<!--\/LOOP-->/gi;
+  resolved = resolved.replace(multiRefLoopRegex, function(match, multirefCols, loopContent) {
+    return executeLoopForMultiRef(multirefCols, loopContent, forPdf);
+  });
   
   // Process HTML comment-based loops (for tables): <!--LOOP:Column=Value-->...<!--/LOOP-->
   // Handle TABLE: loops specially - they need async processing

@@ -166,6 +166,19 @@ function setLang(lang) {
   });
 }
 
+// =============================================================================
+// UTILS
+// =============================================================================
+
+function sanitize(str) {
+  var div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function isInsideGrist() {
+  try { return window.self !== window.top; } catch (e) { return true; }
+}
 
 // =============================================================================
 // TOAST & MODAL
@@ -198,9 +211,9 @@ function closeModal(result) {
   if (modalResolve) { modalResolve(result || false); modalResolve = null; }
 }
 
-// ==============================================================================
+// =============================================================================
 // STATE
-// ==============================================================================
+// =============================================================================
 
 var allTables = [];
 var selectedTable = '';
@@ -215,78 +228,6 @@ var TEMPLATE_STORAGE_KEY = 'grist_doc_template_';
 var pdfCancelled = false;
 
 // =============================================================================
-// UTILS
-// =============================================================================
-
-// =============================================================================
-// UTILS
-// =============================================================================
-
-function sanitize(str) {
-  var div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
-}
-
-function isInsideGrist() {
-  try { return window.self !== window.top; } catch (e) { return true; }
-}
-
-function getEditorHtml() {
-  return editorInstance ? editorInstance.getEditorValue() : '';
-}
-
-function setEditorHtml(html) {
-  if (editorInstance) {
-    editorInstance.setEditorValue(html);
-    templateHtml = html;
-  }
-}
-
-function escapeRegex(str) {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-// Store last cursor position before clicking outside editor
-var lastEditorRange = null;
-
-function saveEditorSelection() {
-  if (!editorInstance) return;
-  try {
-    var sel = editorInstance.selection;
-    if (sel && sel.sel && sel.sel.rangeCount > 0) {
-      lastEditorRange = sel.sel.getRangeAt(0).cloneRange();
-    }
-  } catch (e) {
-    // Ignore errors
-  }
-}
-
-function restoreEditorSelection() {
-  if (!editorInstance || !lastEditorRange) return false;
-  try {
-    editorInstance.focus();
-    var sel = window.getSelection();
-    sel.removeAllRanges();
-    sel.addRange(lastEditorRange);
-    return true;
-  } catch (e) {
-    return false;
-  }
-}
-
-function insertVariable(colName) {
-  if (!editorInstance) return;
-
-  // Restore cursor position if it was saved
-  restoreEditorSelection();
-
-  var varHtml = '<span style="background:#f3e8ff;color:#7c3aed;padding:2px 6px;border-radius:4px;font-weight:600;" contenteditable="false">{{' + colName + '}}</span>&nbsp;';
-  editorInstance.selection.insertHTML(varHtml);
-  showToast('{{' + colName + '}} ' + (currentLang === 'fr' ? 'inséré' : 'inserted'), 'info');
-}
-
-// =============================================================================
 // TABS
 // =============================================================================
 
@@ -297,7 +238,7 @@ function switchTab(tabId) {
   document.querySelectorAll('.tab-content').forEach(function(tc) {
     tc.classList.toggle('active', tc.id === 'tab-' + tabId);
   });
-
+  
   // Show/hide fixed bars based on tab
   var fixedVarBar = document.getElementById('fixed-var-bar');
   var fixedBottomBar = document.querySelector('.fixed-bottom-bar');
@@ -308,7 +249,7 @@ function switchTab(tabId) {
     if (fixedVarBar) fixedVarBar.style.display = 'none';
     if (fixedBottomBar) fixedBottomBar.style.display = 'none';
   }
-
+  
   if (tabId === 'preview') {
     renderPreview();
   }
@@ -326,112 +267,61 @@ if (!isInsideGrist()) {
   document.getElementById('main-content').classList.add('hidden');
 } else {
   (async function init() {
-  try {
-    if (!isInsideGrist()) {
-      var notInGristElement = document.getElementById('not-in-grist');
-      var mainContentElement = document.getElementById('main-content');
-      if (notInGristElement && mainContentElement) {
-        notInGristElement.classList.remove('hidden');
-        mainContentElement.classList.add('hidden');
-      }
-      return;
-    }
+    try {
+      await grist.ready({ requiredAccess: 'full' });
+      console.log('Doc Template widget ready');
 
-    await grist.ready({ requiredAccess: 'full' });
-    console.log('Doc Template widget ready');
+      // Initialize editor FIRST so it's ready when we load templates
+      initEditor();
+      
+      
+      // Show fixed bars for editor tab (default tab)
+      var fixedVarBar = document.getElementById('fixed-var-bar');
+      var fixedBottomBar = document.querySelector('.fixed-bottom-bar');
+      if (fixedVarBar) fixedVarBar.style.display = 'block';
+      if (fixedBottomBar) fixedBottomBar.style.display = 'block';
 
-    // Définir refreshTemplateList avant de l'utiliser
-    async function refreshTemplateList() {
-      var select = document.getElementById('template-select');
-      if (!select) return;
-
+      // Restore draft immediately after editor init
       try {
-        var options = await grist.widgetApi.getOptions();
-        var templates = [];
+        var draft = await grist.widgetApi.getOption('editorDraft');
+        console.log('Draft from options:', draft ? draft.substring(0, 50) + '...' : 'null');
+        if (draft && editorInstance) {
+          setEditorHtml(draft);
+          templateHtml = draft;
+          console.log('Draft restored at startup');
+        }
+      } catch (e) {
+        console.warn('Could not restore draft:', e);
+      }
 
-        // Trouver toutes les clés template_*
-        for (var key in options) {
-          if (key.startsWith('template_')) {
-            var tableName = key.substring(9); // Supprimer le préfixe 'template_'
-            var nameKey = 'template_name_' + tableName;
-            var name = options[nameKey] || tableName;
-            templates.push({
-              table: tableName,
-              name: name,
-              key: key
-            });
+      // Listen for widget options (template stored in Grist)
+      grist.onOptions(function(options) {
+        if (options && options.template && selectedTable) {
+          var key = 'template_' + selectedTable;
+          if (options[key]) {
+            setEditorHtml(options[key]);
+            templateHtml = options[key];
+            console.log('Template loaded from Grist options for', selectedTable);
           }
         }
+      });
 
-        // Trier par nom
-        templates.sort(function(a, b) {
-          return a.name.localeCompare(b.name);
-        });
+      // Listen for filtered records from "Select By" configuration
+      grist.onRecords(function(records) {
+        console.log('Received filtered records from Select By:', records.length);
+        filteredRecords = records || [];
+      });
 
-        // Remplir le sélecteur
-        select.innerHTML = '<option value="">' + t('templateSelectDefault') + '</option>';
-        for (var i = 0; i < templates.length; i++) {
-          var opt = document.createElement('option');
-          opt.value = templates[i].key;
-          opt.textContent = templates[i].name + ' (' + templates[i].table + ')';
-          select.appendChild(opt);
-        }
-
-      } catch (error) {
-        console.error('Error refreshing template list:', error);
-      }
+      // Load tables and restore selection
+      await loadTables();
+      
+      // Load saved templates list
+      await refreshTemplateList();
+      console.log('Template list refreshed at startup');
+    } catch (error) {
+      console.error('Init error:', error);
     }
-
-    // Initialiser l'éditeur EN PREMIER pour qu'il soit prêt lorsque nous chargeons les modèles
-    initEditor();
-
-    // Afficher les barres fixes pour l'onglet de l'éditeur (onglet par défaut)
-    var fixedVarBar = document.getElementById('fixed-var-bar');
-    var fixedBottomBar = document.querySelector('.fixed-bottom-bar');
-    if (fixedVarBar) fixedVarBar.style.display = 'block';
-    if (fixedBottomBar) fixedBottomBar.style.display = 'block';
-
-    // Restaurer le brouillon immédiatement après l'initialisation de l'éditeur
-    try {
-      var draft = await grist.widgetApi.getOption('editorDraft');
-      console.log('Draft from options:', draft ? draft.substring(0, 50) + '...' : 'null');
-      if (draft && editorInstance) {
-        setEditorHtml(draft);
-        templateHtml = draft;
-        console.log('Draft restored at startup');
-      }
-    } catch (e) {
-      console.warn('Could not restore draft:', e);
-    }
-
-    // Écouter les options du widget (modèle stocké dans Grist)
-    grist.onOptions(function(options) {
-      if (options && options.template && selectedTable) {
-        var key = 'template_' + selectedTable;
-        if (options[key]) {
-          setEditorHtml(options[key]);
-          templateHtml = options[key];
-          console.log('Template loaded from Grist options for', selectedTable);
-        }
-      }
-    });
-
-    // Écouter les enregistrements filtrés depuis la configuration "Select By"
-    grist.onRecords(function(records) {
-      console.log('Received filtered records from Select By:', records.length);
-      filteredRecords = records || [];
-    });
-
-    // Charger les tables et restaurer la sélection
-    await loadTables();
-
-    // Charger la liste des modèles sauvegardés
-    await refreshTemplateList();
-    console.log('Template list refreshed at startup');
-  } catch (error) {
-    console.error('Init error:', error);
-  }
-})();
+  })();
 }
 
 // =============================================================================
@@ -440,37 +330,26 @@ if (!isInsideGrist()) {
 
 async function loadTables() {
   var loading = document.getElementById('table-loading');
-  if (loading) loading.classList.remove('hidden');
-
+  loading.classList.remove('hidden');
   try {
-    var tables = await grist.docApi.fetchTable('_grist_Tables');
-    allTables = [];
-
-    // Filtrer les tables utiles
-    for (var i = 0; i < tables.tableId.length; i++) {
-      var tableName = tables.tableId[i];
-      if (!tableName.startsWith('_grist_') && !tableName.startsWith('GristHidden_')) {
-        allTables.push(tableName);
-      }
-    }
-
+    var tables = await grist.docApi.listTables();
+    allTables = tables.filter(function(t) {
+      return !t.startsWith('_grist_') && !t.startsWith('GristHidden_');
+    });
     var select = document.getElementById('table-select');
-    if (select) {
-      select.innerHTML = '<option value="">' + t('selectTableOption') + '</option>';
-      for (var i = 0; i < allTables.length; i++) {
-        var opt = document.createElement('option');
-        opt.value = allTables[i];
-        opt.textContent = allTables[i];
-        select.appendChild(opt);
-      }
+    select.innerHTML = '<option value="">' + t('selectTableOption') + '</option>';
+    for (var i = 0; i < allTables.length; i++) {
+      var opt = document.createElement('option');
+      opt.value = allTables[i];
+      opt.textContent = allTables[i];
+      select.appendChild(opt);
     }
-
-    // Restaurer la table précédemment sélectionnée
+    
+    // Restore previously selected table
     try {
       var savedTable = await grist.widgetApi.getOption('selectedTable');
-      if (savedTable && allTables.includes(savedTable)) {
-        if (select) select.value = savedTable;
-        selectedTable = savedTable;
+      if (savedTable && allTables.indexOf(savedTable) !== -1) {
+        select.value = savedTable;
         await onTableChange(true); // true = skip saving again
       }
     } catch (e) {
@@ -478,16 +357,13 @@ async function loadTables() {
     }
   } catch (error) {
     console.error('Error loading tables:', error);
-    showToast(t('importError') + error.message, 'error');
   } finally {
-    if (loading) loading.classList.add('hidden');
+    loading.classList.add('hidden');
   }
 }
 
 async function onTableChange(skipSave) {
   var select = document.getElementById('table-select');
-  if (!select) return;
-
   selectedTable = select.value;
   if (!selectedTable) {
     tableColumns = [];
@@ -502,18 +378,18 @@ async function onTableChange(skipSave) {
     tableColumns = Object.keys(data).filter(function(c) {
       return c !== 'id' && c !== 'manualSort' && !c.startsWith('gristHelper_');
     });
-
-    // Charger les métadonnées des colonnes pour détecter les colonnes de référence
+    
+    // Fetch column metadata to detect Reference columns
     await loadColumnMetadata(selectedTable);
-    // Résoudre les références
+    // Resolve reference values
     await resolveReferences();
-    // Charger les vues disponibles pour cette table
+    // Load available views for this table
     await loadViewsForTable(selectedTable);
-
+    
     renderVariableChips();
     document.getElementById('var-panel').classList.remove('hidden');
 
-    // Sauvegarder la table sélectionnée dans les options du widget
+    // Save selected table to widget options (persist across page changes)
     if (!skipSave) {
       try {
         await grist.widgetApi.setOption('selectedTable', selectedTable);
@@ -522,7 +398,7 @@ async function onTableChange(skipSave) {
       }
     }
 
-    // Charger le modèle sauvegardé pour cette table
+    // Load saved template for this table (only if editor is empty)
     if (!getEditorHtml().trim()) {
       loadSavedTemplate();
     }
@@ -562,7 +438,7 @@ async function loadViewsForTable(tableName) {
     var viewsData = await grist.docApi.fetchTable('_grist_Views');
     var sectionsData = await grist.docApi.fetchTable('_grist_Views_section');
     var tablesData = await grist.docApi.fetchTable('_grist_Tables');
-
+    
     // Fetch _grist_Filters table (where Grist stores saved filters)
     var filtersData = null;
     try {
@@ -570,7 +446,7 @@ async function loadViewsForTable(tableName) {
     } catch (e) {
       console.log('_grist_Filters not available:', e.message);
     }
-
+    
     // Find table ID for the selected table
     var tableId = null;
     if (tablesData && tablesData.id) {
@@ -582,7 +458,7 @@ async function loadViewsForTable(tableName) {
       }
     }
     if (!tableId) return;
-
+    
     // Build a map of sectionId -> filters from _grist_Filters
     var sectionFiltersFromGrist = {}; // sectionId -> [{colRef, filter}]
     if (filtersData && filtersData.id) {
@@ -590,7 +466,7 @@ async function loadViewsForTable(tableName) {
         var sectionRef = filtersData.viewSectionRef[i];
         var colRef = filtersData.colRef[i];
         var filterJson = filtersData.filter[i];
-
+        
         if (!sectionFiltersFromGrist[sectionRef]) {
           sectionFiltersFromGrist[sectionRef] = [];
         }
@@ -600,12 +476,12 @@ async function loadViewsForTable(tableName) {
         });
       }
     }
-
+    
     // Find all view sections that use this table
     var viewIdsWithTable = new Set();
     var sectionFilters = {}; // sectionId -> filters array
     var sectionToView = {}; // sectionId -> viewId
-
+    
     if (sectionsData && sectionsData.id) {
       for (var i = 0; i < sectionsData.id.length; i++) {
         if (sectionsData.tableRef && sectionsData.tableRef[i] === tableId) {
@@ -614,7 +490,7 @@ async function loadViewsForTable(tableName) {
           if (viewId) {
             viewIdsWithTable.add(viewId);
             sectionToView[sectionId] = viewId;
-
+            
             // Get filters from _grist_Filters for this section
             if (sectionFiltersFromGrist[sectionId]) {
               sectionFilters[sectionId] = sectionFiltersFromGrist[sectionId];
@@ -623,14 +499,14 @@ async function loadViewsForTable(tableName) {
         }
       }
     }
-
+    
     // Build list of views with their names and filters
     if (viewsData && viewsData.id) {
       for (var i = 0; i < viewsData.id.length; i++) {
         var viewId = viewsData.id[i];
         if (viewIdsWithTable.has(viewId)) {
           var viewName = viewsData.name ? viewsData.name[i] : 'View ' + viewId;
-
+          
           // Find filters for this view (from any of its sections)
           var viewFilters = null;
           var viewSectionId = null;
@@ -641,7 +517,7 @@ async function loadViewsForTable(tableName) {
               break;
             }
           }
-
+          
           availableViews.push({
             id: viewId,
             name: viewName,
@@ -651,7 +527,7 @@ async function loadViewsForTable(tableName) {
         }
       }
     }
-
+    
     console.log('Available views for table', tableName, ':', availableViews);
   } catch (error) {
     console.error('Error loading views:', error);
@@ -669,12 +545,12 @@ async function loadColumnMetadata(tableName) {
     // Fetch _grist_Tables_column to get column types
     var colData = await grist.docApi.fetchTable('_grist_Tables_column');
     var tablesData = await grist.docApi.fetchTable('_grist_Tables');
-
+    
     // Build global column ID -> name mapping (for all tables)
     for (var j = 0; j < colData.id.length; j++) {
       columnIdToName[colData.id[j]] = colData.colId[j];
     }
-
+    
     // Find table ID
     var tableId = null;
     for (var i = 0; i < tablesData.id.length; i++) {
@@ -684,7 +560,7 @@ async function loadColumnMetadata(tableName) {
       }
     }
     if (!tableId) return;
-
+    
     // Get columns for this table
     for (var i = 0; i < colData.id.length; i++) {
       if (colData.parentId[i] === tableId) {
@@ -692,14 +568,14 @@ async function loadColumnMetadata(tableName) {
         var colType = colData.type[i];
         var displayCol = colData.displayCol[i];
         var visibleColId = colData.visibleCol[i];
-
+        
         // Resolve visibleCol ID to column name
         var visibleColName = visibleColId ? columnIdToName[visibleColId] : null;
-
+        
         columnMetadata[colId] = {
           type: colType,
           displayCol: displayCol,
-          visibleCol: visibleColName
+          visibleCol: visibleColName // Now it's the column NAME, not ID
         };
       }
     }
@@ -711,31 +587,32 @@ async function loadColumnMetadata(tableName) {
 
 async function resolveReferences() {
   if (!tableData || !columnMetadata) return;
-
+  
   for (var colName in columnMetadata) {
     var meta = columnMetadata[colName];
     if (!meta.type) continue;
-
+    
     // Check if it's a Reference or ReferenceList column
     var refMatch = meta.type.match(/^Ref:(.+)$/);
     var refListMatch = meta.type.match(/^RefList:(.+)$/);
-
+    
     if (refMatch || refListMatch) {
       var refTableName = refMatch ? refMatch[1] : refListMatch[1];
-
+      
       // Fetch the referenced table if not cached
       if (!referenceTables[refTableName]) {
         try {
           referenceTables[refTableName] = await grist.docApi.fetchTable(refTableName);
           console.log('Fetched reference table:', refTableName);
-
+          
           // Build display values map using visibleCol from the reference column metadata
+          // This is the column Grist uses to display reference values
           referenceDisplayValues[refTableName] = { byVisibleCol: {}, byFirstTextCol: {} };
           var refData = referenceTables[refTableName];
-
+          
           // Use visibleCol from metadata if available, otherwise find display column
           var visibleColName = meta.visibleCol || findDisplayColumn(refData, null);
-
+          
           // Also find the first text column (often contains identifiers like "DUMZ 60")
           var firstTextCol = null;
           for (var colKey in refData) {
@@ -746,7 +623,7 @@ async function resolveReferences() {
               }
             }
           }
-
+          
           if (refData.id) {
             for (var k = 0; k < refData.id.length; k++) {
               if (visibleColName && refData[visibleColName]) {
@@ -763,13 +640,13 @@ async function resolveReferences() {
           continue;
         }
       }
-
+      
       var refTable = referenceTables[refTableName];
       if (!refTable || !tableData[colName]) continue;
-
+      
       // Find the display column (usually the first text column or rowId)
       var displayColName = findDisplayColumn(refTable, meta.visibleCol);
-
+      
       // Replace IDs with display values
       var resolvedValues = [];
       for (var i = 0; i < tableData[colName].length; i++) {
@@ -805,13 +682,13 @@ function findDisplayColumn(refTable, visibleColId) {
     // visibleCol is a column ID, we need to find the column name
     // For now, just use common display columns
   }
-
+  
   // Try common display column names
   var commonNames = ['Nom_complet', 'Nom complet', 'nom_complet', 'Name', 'name', 'Nom', 'nom', 'Label', 'label', 'Title', 'title'];
   for (var i = 0; i < commonNames.length; i++) {
     if (refTable[commonNames[i]]) return commonNames[i];
   }
-
+  
   // Fallback: find first text column (not id, not manualSort)
   for (var col in refTable) {
     if (col !== 'id' && col !== 'manualSort' && !col.startsWith('gristHelper_')) {
@@ -820,13 +697,13 @@ function findDisplayColumn(refTable, visibleColId) {
       }
     }
   }
-
+  
   return null;
 }
 
 function lookupRefValue(refTable, refId, displayColName) {
   if (!refTable || !refTable.id || !displayColName) return null;
-
+  
   var idx = refTable.id.indexOf(refId);
   if (idx >= 0 && refTable[displayColName]) {
     return refTable[displayColName][idx];
@@ -834,28 +711,29 @@ function lookupRefValue(refTable, refId, displayColName) {
   return null;
 }
 
+
 // =============================================================================
 // VARIABLE CHIPS
 // =============================================================================
 
 function renderVariableChips() {
   var html = '';
-
+  
   // Add loop syntax helper chip
   html += '<span class="var-chip" style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d;" onclick="insertLoopSyntax()" title="' + t('loopExample') + '">';
   html += '🔄 ' + t('loopHint');
   html += '</span>';
-
+  
   // Add table with loop helper chip
   html += '<span class="var-chip" style="background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;" onclick="insertTableWithLoop()" title="' + t('tableLoopHint') + '">';
   html += '📊 ' + t('tableLoopBtn');
   html += '</span>';
-
+  
   // Add image insertion helper chip
   html += '<span class="var-chip" style="background:#dcfce7;color:#166534;border:1px solid #86efac;" onclick="insertImageVariable()" title="' + (currentLang === 'fr' ? 'Insérer une image depuis une colonne' : 'Insert image from column') + '">';
   html += '🖼️ ' + (currentLang === 'fr' ? 'Image' : 'Image');
   html += '</span>';
-
+  
   for (var i = 0; i < tableColumns.length; i++) {
     var col = tableColumns[i];
     html += '<span class="var-chip" onclick="insertVariable(\'' + sanitize(col) + '\')">';
@@ -868,14 +746,14 @@ function renderVariableChips() {
 // Insert image variable with column selection dialog
 function insertImageVariable() {
   if (!editorInstance) return;
-
+  
   restoreEditorSelection();
-
+  
   // Build column options
   var colOptions = tableColumns.map(function(col) {
     return '<option value="' + col + '">' + col + '</option>';
   }).join('');
-
+  
   var dialog = document.createElement('div');
   dialog.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:white;padding:20px;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.3);z-index:10000;min-width:300px;';
   dialog.innerHTML = '\
@@ -898,33 +776,33 @@ function insertImageVariable() {
       • Chemin + URL base (config PDF)\
     </div>\
     <div style="display:flex;gap:10px;">\
-      <button id="img-insert" style="flex:1;padding:10px;background:#3b82f6;color:white;border:none;border-radius:6px;cursor:pointer;">' + (currentLang === 'fr' ? 'Insérer' : 'Insert') + '</button>\
+      <button id="img-insert" style="flex:1;padding:10px;background:#22c55e;color:white;border:none;border-radius:6px;cursor:pointer;">' + (currentLang === 'fr' ? 'Insérer' : 'Insert') + '</button>\
       <button id="img-cancel" style="flex:1;padding:10px;background:#f1f5f9;border:none;border-radius:6px;cursor:pointer;">' + (currentLang === 'fr' ? 'Annuler' : 'Cancel') + '</button>\
     </div>\
   ';
-
+  
   var overlay = document.createElement('div');
   overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.3);z-index:9999;';
-
+  
   document.body.appendChild(overlay);
   document.body.appendChild(dialog);
-
+  
   dialog.querySelector('#img-insert').addEventListener('click', function() {
     var col = dialog.querySelector('#img-column').value;
     var width = dialog.querySelector('#img-width').value;
-
+    
     var syntax = '{{IMG:' + col + (width ? ':' + width : '') + '}}';
     editorInstance.selection.insertHTML('<span style="background:#dcfce7;color:#166534;padding:2px 6px;border-radius:4px;">' + syntax + '</span>');
-
+    
     document.body.removeChild(dialog);
     document.body.removeChild(overlay);
   });
-
+  
   dialog.querySelector('#img-cancel').addEventListener('click', function() {
     document.body.removeChild(dialog);
     document.body.removeChild(overlay);
   });
-
+  
   overlay.addEventListener('click', function() {
     document.body.removeChild(dialog);
     document.body.removeChild(overlay);
@@ -933,18 +811,18 @@ function insertImageVariable() {
 
 function insertLoopSyntax() {
   if (!editorInstance) return;
-
+  
   // Restore cursor position if it was saved
   restoreEditorSelection();
-
+  
   var exampleCol = tableColumns.length > 0 ? tableColumns[0] : 'Colonne';
   var placeholder = currentLang === 'fr' ? 'Contenu répété ici...' : 'Repeated content here...';
-
+  
   // Simple text-based loop - easier to edit
   var loopHtml = '<p>{{#each ' + exampleCol + '=Valeur}}</p>' +
     '<p>' + placeholder + '</p>' +
     '<p>{{/each}}</p>';
-
+  
   editorInstance.selection.insertHTML(loopHtml);
   showToast(t('loopSyntax') + ' ' + (currentLang === 'fr' ? 'inséré' : 'inserted'), 'info');
 }
@@ -954,11 +832,11 @@ function getUniqueValuesForColumn(colName) {
   var values = tableData[colName];
   var unique = [];
   var seen = {};
-
+  
   // Check if this is a date column
   var meta = columnMetadata[colName];
   var isDateColumn = meta && meta.type && (meta.type === 'Date' || meta.type === 'DateTime');
-
+  
   // Add resolved values from tableData (current table rows)
   for (var i = 0; i < values.length; i++) {
     var val = values[i];
@@ -975,11 +853,11 @@ function getUniqueValuesForColumn(colName) {
       }
     }
   }
-
+  
   // For reference columns, add ALL values from the reference table
   var meta = columnMetadata[colName];
   if (meta && meta.type) {
-    var refMatch = meta.type.match(/^Ref:(.+)\$/);
+    var refMatch = meta.type.match(/^Ref:(.+)$/);
     if (refMatch) {
       var refTableName = refMatch[1];
       var refDisplayData = referenceDisplayValues[refTableName];
@@ -1007,7 +885,7 @@ function getUniqueValuesForColumn(colName) {
       }
     }
   }
-
+  
   return unique.sort();
 }
 
@@ -1015,10 +893,10 @@ function updateLoopValueOptions() {
   var colSelect = document.getElementById('loop-filter-col');
   var valSelect = document.getElementById('loop-filter-val-select');
   if (!colSelect || !valSelect) return;
-
+  
   var colName = colSelect.value;
   var uniqueVals = getUniqueValuesForColumn(colName);
-
+  
   valSelect.innerHTML = '<option value="">' + (currentLang === 'fr' ? '-- Choisir une valeur --' : '-- Choose a value --') + '</option>';
   for (var i = 0; i < uniqueVals.length; i++) {
     var opt = document.createElement('option');
@@ -1036,9 +914,9 @@ async function updateLinkedTableColumns() {
   var refColSelect = document.getElementById('loop-linked-ref-col');
   var colsContainer = document.getElementById('linked-cols-container');
   var colsCheckboxes = document.getElementById('linked-cols-checkboxes');
-
+  
   if (!tableSelect || !refColSelect || !colsCheckboxes) return;
-
+  
   var linkedTableName = tableSelect.value;
   if (!linkedTableName) {
     refColSelect.innerHTML = '<option value="">' + (currentLang === 'fr' ? '-- Choisir la colonne Ref --' : '-- Choose Ref column --') + '</option>';
@@ -1046,12 +924,12 @@ async function updateLinkedTableColumns() {
     if (colsContainer) colsContainer.style.display = 'none';
     return;
   }
-
+  
   try {
     // Fetch column metadata for the linked table
     var colData = await grist.docApi.fetchTable('_grist_Tables_column');
     var tablesData = await grist.docApi.fetchTable('_grist_Tables');
-
+    
     // Find table ID
     var tableId = null;
     for (var i = 0; i < tablesData.id.length; i++) {
@@ -1061,7 +939,7 @@ async function updateLinkedTableColumns() {
       }
     }
     if (!tableId) return;
-
+    
     // Get columns for this table
     var linkedCols = [];
     var refCols = [];
@@ -1069,19 +947,19 @@ async function updateLinkedTableColumns() {
       if (colData.parentId[i] === tableId) {
         var colId = colData.colId[i];
         var colType = colData.type[i];
-
+        
         // Skip internal columns
         if (colId.startsWith('gristHelper_') || colId === 'manualSort') continue;
-
+        
         linkedCols.push(colId);
-
+        
         // Check if it's a Ref column pointing to the selected table
         if (colType && colType.startsWith('Ref:') && colType === 'Ref:' + selectedTable) {
           refCols.push(colId);
         }
       }
     }
-
+    
     // Populate reference column dropdown
     refColSelect.innerHTML = '<option value="">' + (currentLang === 'fr' ? '-- Choisir la colonne Ref --' : '-- Choose Ref column --') + '</option>';
     for (var r = 0; r < refCols.length; r++) {
@@ -1090,7 +968,7 @@ async function updateLinkedTableColumns() {
       opt.textContent = refCols[r] + ' (→ ' + selectedTable + ')';
       refColSelect.appendChild(opt);
     }
-
+    
     // If no ref columns found, show a message
     if (refCols.length === 0) {
       var noRefOpt = document.createElement('option');
@@ -1098,7 +976,7 @@ async function updateLinkedTableColumns() {
       noRefOpt.textContent = currentLang === 'fr' ? '⚠️ Aucune colonne Ref vers ' + selectedTable : '⚠️ No Ref column to ' + selectedTable;
       refColSelect.appendChild(noRefOpt);
     }
-
+    
     // Populate columns checkboxes
     colsCheckboxes.innerHTML = '';
     for (var c = 0; c < linkedCols.length; c++) {
@@ -1108,44 +986,37 @@ async function updateLinkedTableColumns() {
       label.innerHTML = '<input type="checkbox" value="' + linkedCols[c] + '" ' + checked + ' style="margin-right:8px;">' + linkedCols[c];
       colsCheckboxes.appendChild(label);
     }
-
+    
     if (colsContainer) colsContainer.style.display = 'block';
+    
+    // Cache metadata
+    linkedTableMetadata[linkedTableName] = { columns: linkedCols, refColumns: refCols };
+    
   } catch (error) {
     console.error('Error loading linked table columns:', error);
   }
 }
 
-function getRefTableName(refCol) {
-  var meta = columnMetadata[refCol];
-  if (meta && meta.type) {
-    var refMatch = meta.type.match(/^RefList:(.+)\$/);
-    if (refMatch) {
-      return refMatch[1];
-    }
-  }
-  return null;
-}
-
 async function updateEditLinkedTableColumns() {
   var tableSelect = document.getElementById('edit-linked-table');
   var refColSelect = document.getElementById('edit-linked-ref-col');
-
+  
   if (!tableSelect || !refColSelect) return;
-
+  
   var linkedTableName = tableSelect.value;
   if (!linkedTableName) {
     refColSelect.innerHTML = '<option value="">' + (currentLang === 'fr' ? '-- Choisir la colonne Ref --' : '-- Choose Ref column --') + '</option>';
     return;
   }
-
+  
   // Keep current value if exists
   var currentValue = refColSelect.value;
-
+  
   try {
     // Fetch column metadata for the linked table
     var colData = await grist.docApi.fetchTable('_grist_Tables_column');
     var tablesData = await grist.docApi.fetchTable('_grist_Tables');
-
+    
     // Find table ID
     var tableId = null;
     for (var i = 0; i < tablesData.id.length; i++) {
@@ -1155,21 +1026,21 @@ async function updateEditLinkedTableColumns() {
       }
     }
     if (!tableId) return;
-
+    
     // Get ref columns for this table
     var refCols = [];
     for (var i = 0; i < colData.id.length; i++) {
       if (colData.parentId[i] === tableId) {
         var colId = colData.colId[i];
         var colType = colData.type[i];
-
+        
         // Check if it's a Ref column pointing to the selected table
         if (colType && colType.startsWith('Ref:') && colType === 'Ref:' + selectedTable) {
           refCols.push(colId);
         }
       }
     }
-
+    
     // Populate reference column dropdown
     refColSelect.innerHTML = '<option value="">' + (currentLang === 'fr' ? '-- Choisir la colonne Ref --' : '-- Choose Ref column --') + '</option>';
     for (var r = 0; r < refCols.length; r++) {
@@ -1179,7 +1050,7 @@ async function updateEditLinkedTableColumns() {
       if (refCols[r] === currentValue) opt.selected = true;
       refColSelect.appendChild(opt);
     }
-
+    
     // If no ref columns found, show a message
     if (refCols.length === 0) {
       var noRefOpt = document.createElement('option');
@@ -1187,7 +1058,7 @@ async function updateEditLinkedTableColumns() {
       noRefOpt.textContent = currentLang === 'fr' ? '⚠️ Aucune colonne Ref vers ' + selectedTable : '⚠️ No Ref column to ' + selectedTable;
       refColSelect.appendChild(noRefOpt);
     }
-
+    
   } catch (error) {
     console.error('Error loading linked table columns:', error);
   }
@@ -1197,10 +1068,10 @@ function updateEditLoopValueOptions() {
   var colSelect = document.getElementById('edit-loop-filter-col');
   var valSelect = document.getElementById('edit-loop-filter-val-select');
   if (!colSelect || !valSelect) return;
-
+  
   var colName = colSelect.value;
   var uniqueVals = getUniqueValuesForColumn(colName);
-
+  
   valSelect.innerHTML = '<option value="">' + (currentLang === 'fr' ? '-- Choisir une valeur --' : '-- Choose a value --') + '</option>';
   for (var i = 0; i < uniqueVals.length; i++) {
     var opt = document.createElement('option');
@@ -1209,152 +1080,212 @@ function updateEditLoopValueOptions() {
     valSelect.appendChild(opt);
   }
 }
-
 function insertTableWithLoop() {
-  if (!editorInstance || !selectedTable) {
-    showToast(currentLang === 'fr' ? 'Veuillez d\'abord sélectionner une table.' : 'Please select a table first.', 'error');
-    return;
-  }
+  if (!editorInstance) return;
 
   restoreEditorSelection();
 
-  // Build column selector options
+  // --- Colonnes disponibles ---
   var colOptions = '';
   for (var i = 0; i < tableColumns.length; i++) {
     colOptions += '<option value="' + tableColumns[i] + '">' + tableColumns[i] + '</option>';
   }
 
-  var formHtml = `
-    <div style="text-align:left;">
-      <div style="margin-bottom:15px;">
-        <label style="display:block;margin-bottom:8px;font-weight:600;">\${currentLang === 'fr' ? 'Type de tableau :' : 'Table type:'}</label>
-        <label style="display:block;margin-bottom:5px;cursor:pointer;">
-          <input type="radio" name="loop-type" value="view" checked style="margin-right:8px;">
-          \${currentLang === 'fr' ? 'Lié à la vue courante' : 'Linked to current view'}
-        </label>
-        <label style="display:block;margin-bottom:5px;cursor:pointer;">
-          <input type="radio" name="loop-type" value="multiref" style="margin-right:8px;">
-          \${currentLang === 'fr' ? 'Colonnes de référence multiple' : 'Multiple reference columns'}
-        </label>
-      </div>
-
-      <!-- Multiple reference columns options -->
-      <div id="multiref-options" style="display:none;border:1px solid #e5e7eb;padding:10px;border-radius:6px;margin-bottom:10px;background:#e0f2fe;">
-        <div style="margin-bottom:10px;">
-          <label style="display:block;margin-bottom:5px;font-weight:600;">\${currentLang === 'fr' ? 'Colonnes de référence multiple :' : 'Multiple reference columns:'}</label>
-          <div id="multiref-cols-container" style="max-height:150px;overflow-y:auto;border:1px solid #eee;padding:8px;border-radius:4px;background:white;">
-            \${colOptions.replace(/<option/g, '<label style="display:block;margin-bottom:5px;cursor:pointer;"><input type="checkbox" name="multiref-col" value="').replace(/<\/option>/g, '" style="margin-right:8px;">')}
-          </div>
-        </div>
-      </div>
-
-      <!-- Columns to display (common to all types) -->
-      <div style="margin-bottom:10px;">
-        <label style="display:block;margin-bottom:5px;font-weight:600;">\${currentLang === 'fr' ? 'Colonnes à afficher :' : 'Columns to display:'}</label>
-        <div id="loop-cols-checkboxes" style="max-height:150px;overflow-y:auto;border:1px solid #eee;padding:8px;border-radius:4px;">`;
-
-  for (var j = 0; j < tableColumns.length; j++) {
-    var checked = j < 5 ? 'checked' : '';
-    formHtml += `
-      <label style="display:block;margin-bottom:5px;cursor:pointer;">
-        <input type="checkbox" value="\${tableColumns[j]}" \${checked} style="margin-right:8px;">\${tableColumns[j]}
-      </label>`;
+  // --- Vues disponibles ---
+  var viewOptions = '<option value="">' + (currentLang === 'fr' ? '-- Choisir une vue --' : '-- Choose a view --') + '</option>';
+  for (var v = 0; v < availableViews.length; v++) {
+    viewOptions += '<option value="' + availableViews[v].id + '">' + availableViews[v].name + '</option>';
   }
 
-  formHtml += `
-        </div>
-      </div>
-    </div>`;
-
-  showModal(currentLang === 'fr' ? '📊 Tableau avec boucle' : '📊 Table with loop', formHtml).then(function(confirmed) {
-    if (!confirmed) return;
-
-    var loopType = document.querySelector('input[name="loop-type"]:checked');
-    var loopTypeValue = loopType ? loopType.value : 'view';
-
-    var selectedCols = [];
-    var checkboxes = document.querySelectorAll('#loop-cols-checkboxes input[type="checkbox"]:checked');
-    checkboxes.forEach(function(cb) { selectedCols.push(cb.value); });
-
-    if (selectedCols.length === 0) {
-      selectedCols = tableColumns.slice(0, 5);
+  // --- Tables disponibles ---
+  var tableOptions = '<option value="">' + (currentLang === 'fr' ? '-- Choisir une table --' : '-- Choose a table --') + '</option>';
+  for (var t = 0; t < allTables.length; t++) {
+    if (allTables[t] !== selectedTable) {
+      tableOptions += '<option value="' + allTables[t] + '">' + allTables[t] + '</option>';
     }
+  }
 
-    var headerCells = '';
-    var dataCells = '';
-    for (var k = 0; k < selectedCols.length; k++) {
-      headerCells += '<th style="border:1px solid #ccc;padding:8px;background:#f3f4f6;">' + selectedCols[k] + '</th>';
-      dataCells += '<td style="border:1px solid #ccc;padding:8px;">{{' + selectedCols[k] + '}}</td>';
-    }
+  // --- UI ---
+  var formHtml = '<div style="text-align:left;">' +
 
-    var tableHtml;
-    if (loopTypeValue === 'view') {
-      tableHtml = '<table style="border-collapse:collapse;width:100%;margin:10px 0;">' +
-        '<thead><tr>' + headerCells + '</tr></thead>' +
-        '<tbody>' +
-        '<!--LOOP:*-->' +
-        '<tr>' + dataCells + '</tr>' +
-        '<!--/LOOP-->' +
-        '</tbody>' +
-        '</table>';
-    } else if (loopTypeValue === 'multiref') {
-      var multirefCols = [];
-      var multirefCheckboxes = document.querySelectorAll('input[name="multiref-col"]:checked');
-      multirefCheckboxes.forEach(function(cb) { multirefCols.push(cb.value); });
+    '<label><input type="radio" name="loop-type" value="view" checked> View</label><br>' +
+    '<label><input type="radio" name="loop-type" value="viewselect"> View (filtered)</label><br>' +
+    '<label><input type="radio" name="loop-type" value="linkedtable"> Linked table</label><br>' +
+    '<label><input type="radio" name="loop-type" value="filter"> Filter</label><br>' +
+    '<label><input type="radio" name="loop-type" value="cellloop"> Loop on cell lists</label>' +
 
-      if (multirefCols.length === 0) {
-        showToast(currentLang === 'fr' ? 'Veuillez sélectionner au moins une colonne de référence multiple.' : 'Please select at least one multiple reference column.', 'error');
-        return;
-      }
+    '<div id="view-select-options" style="display:none;margin-top:10px;">' +
+    '<select id="loop-view-select">' + viewOptions + '</select>' +
+    '</div>' +
 
-      tableHtml = '<table style="border-collapse:collapse;width:100%;margin:10px 0;">' +
-        '<thead><tr>' + headerCells + '</tr></thead>' +
-        '<tbody>' +
-        '<!--LOOP:MULTIREF:' + multirefCols.join(':') + '-->' +
-        '<tr>' + dataCells + '</tr>' +
-        '<!--/LOOP-->' +
-        '</tbody>' +
-        '</table>';
-    }
+    '<div id="linked-table-options" style="display:none;margin-top:10px;">' +
+    '<select id="loop-linked-table">' + tableOptions + '</select>' +
+    '<select id="loop-linked-ref-col"></select>' +
+    '</div>' +
 
-    editorInstance.selection.insertHTML(tableHtml);
-    showToast(currentLang === 'fr' ? 'Tableau avec boucle inséré' : 'Table with loop inserted', 'info');
-  });
+    '<div id="filter-options" style="display:none;margin-top:10px;">' +
+    '<select id="loop-filter-col" onchange="updateLoopValueOptions()">' + colOptions + '</select>' +
+    '<select id="loop-filter-val-select"></select>' +
+    '<input type="text" id="loop-filter-val">' +
+    '</div>' +
 
-  setTimeout(function() {
+    '<div style="margin-top:10px;">' +
+    '<strong>' + (currentLang === 'fr' ? 'Colonnes :' : 'Columns:') + '</strong>' +
+    '<div id="loop-cols-checkboxes">';
+  
+  for (var j = 0; j < tableColumns.length; j++) {
+    formHtml += '<label>' +
+      '<input type="checkbox" value="' + tableColumns[j] + '" checked> ' +
+      tableColumns[j] +
+      '</label><br>';
+  }
+
+  formHtml += '</div></div></div>';
+
+  // --- Init UI ---
+  setTimeout(function () {
+    updateLoopValueOptions();
+
     var radios = document.querySelectorAll('input[name="loop-type"]');
-    radios.forEach(function(radio) {
-      radio.addEventListener('change', function() {
-        var multirefOptions = document.getElementById('multiref-options');
-        if (multirefOptions) {
-          multirefOptions.style.display = this.value === 'multiref' ? 'block' : 'none';
-        }
+    radios.forEach(function (radio) {
+      radio.addEventListener('change', function () {
+        document.getElementById('filter-options').style.display =
+          this.value === 'filter' ? 'block' : 'none';
+
+        document.getElementById('view-select-options').style.display =
+          this.value === 'viewselect' ? 'block' : 'none';
+
+        document.getElementById('linked-table-options').style.display =
+          this.value === 'linkedtable' ? 'block' : 'none';
       });
     });
   }, 100);
+
+  // --- Modal ---
+  showModal('📊 Table with loop', formHtml).then(function (confirmed) {
+    if (!confirmed) return;
+
+    var loopType = document.querySelector('input[name="loop-type"]:checked').value;
+
+    var selectedCols = [];
+    document.querySelectorAll('#loop-cols-checkboxes input:checked')
+      .forEach(cb => selectedCols.push(cb.value));
+
+    if (selectedCols.length === 0) {
+      selectedCols = tableColumns.slice(0, 3);
+    }
+
+    // --- Header + row template ---
+    var headerCells = '';
+    var dataCells = '';
+
+    selectedCols.forEach(function (col) {
+      headerCells += '<th>' + col + '</th>';
+      dataCells += '<td>{{' + col + '}}</td>';
+    });
+
+    var loopInstruction = '';
+
+    // --- SWITCH LOOP TYPE ---
+    if (loopType === 'view') {
+      loopInstruction = 'LOOP:*';
+
+    } else if (loopType === 'viewselect') {
+      var viewId = document.getElementById('loop-view-select').value;
+      loopInstruction = 'LOOP:VIEW:' + viewId;
+
+    } else if (loopType === 'linkedtable') {
+      var table = document.getElementById('loop-linked-table').value;
+      var ref = document.getElementById('loop-linked-ref-col').value;
+      loopInstruction = 'LOOP:TABLE:' + table + ':' + ref;
+
+    } else if (loopType === 'filter') {
+      var col = document.getElementById('loop-filter-col').value;
+      var val =
+        document.getElementById('loop-filter-val-select').value ||
+        document.getElementById('loop-filter-val').value;
+      loopInstruction = 'LOOP:' + col + '=' + val;
+
+    } else if (loopType === 'cellloop') {
+      // 🔥 NOUVEAU MODE GÉNÉRIQUE
+      loopInstruction = 'LOOP:CELL:' + selectedCols.join('|');
+    }
+
+    // --- HTML final ---
+    var tableHtml =
+      '<table style="border-collapse:collapse;width:100%;margin:10px 0;">' +
+      '<thead><tr>' + headerCells + '</tr></thead>' +
+      '<tbody>' +
+      '<!--' + loopInstruction + '-->' +
+      '<tr>' + dataCells + '</tr>' +
+      '<!--/LOOP-->' +
+      '</tbody>' +
+      '</table>';
+
+    editorInstance.selection.insertHTML(tableHtml);
+
+    showToast('Table inserted (' + loopType + ')', 'info');
+  });
 }
 
+// Store last cursor position before clicking outside editor
+var lastEditorRange = null;
+
+function saveEditorSelection() {
+  if (!editorInstance) return;
+  try {
+    var sel = editorInstance.selection;
+    if (sel && sel.sel && sel.sel.rangeCount > 0) {
+      lastEditorRange = sel.sel.getRangeAt(0).cloneRange();
+    }
+  } catch (e) {
+    // Ignore errors
+  }
+}
+
+function restoreEditorSelection() {
+  if (!editorInstance || !lastEditorRange) return false;
+  try {
+    editorInstance.focus();
+    var sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(lastEditorRange);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+function insertVariable(colName) {
+  if (!editorInstance) return;
+  
+  // Restore cursor position if it was saved
+  restoreEditorSelection();
+  
+  var varHtml = '<span style="background:#f3e8ff;color:#7c3aed;padding:2px 6px;border-radius:4px;font-weight:600;" contenteditable="false">{{' + colName + '}}</span>&nbsp;';
+  editorInstance.selection.insertHTML(varHtml);
+  showToast('{{' + colName + '}} inséré', 'info');
+}
+
+// Edit existing loop in a table
 function editTableLoop(tableElement) {
   if (!editorInstance || !tableElement) return;
-
+  
   // Find the loop comment in the table
   var tbody = tableElement.querySelector('tbody');
   if (!tbody) return;
-
+  
   var loopComment = null;
   var currentFilterCol = '';
   var currentFilterVal = '';
+  
+  // Search for loop comment in tbody
   var isViewLinked = false;
   var isViewSelect = false;
   var isLinkedTable = false;
-  var isMultiRef = false;
   var currentViewId = '';
   var currentLinkedTable = '';
   var currentLinkedRefCol = '';
-  var currentFirstRefCol = '';
-  var currentSecondRefCol = '';
-
-  // Search for loop comment in tbody
   for (var i = 0; i < tbody.childNodes.length; i++) {
     var node = tbody.childNodes[i];
     if (node.nodeType === 8) { // Comment node
@@ -1363,7 +1294,7 @@ function editTableLoop(tableElement) {
         isViewLinked = true;
         break;
       }
-      var viewMatch = node.textContent.match(/^LOOP:VIEW:(\d+)\$/);
+      var viewMatch = node.textContent.match(/^LOOP:VIEW:(\d+)$/);
       if (viewMatch) {
         loopComment = node;
         isViewSelect = true;
@@ -1378,15 +1309,6 @@ function editTableLoop(tableElement) {
         currentLinkedRefCol = tableMatch[2];
         break;
       }
-      var multiRefMatch = node.textContent.match(/^LOOP:MULTIREF:([^>]+)/);
-      if (multiRefMatch) {
-        loopComment = node;
-        isMultiRef = true;
-        var cols = multiRefMatch[1].split(':');
-        currentFirstRefCol = cols[0];
-        currentSecondRefCol = cols[1];
-        break;
-      }
       var match = node.textContent.match(/^LOOP:([^=]+)=(.*)$/);
       if (match) {
         loopComment = node;
@@ -1396,18 +1318,71 @@ function editTableLoop(tableElement) {
       }
     }
   }
-
+  
   if (!loopComment) {
     showToast(currentLang === 'fr' ? 'Aucune boucle trouvée dans ce tableau' : 'No loop found in this table', 'error');
     return;
   }
-
+  
+  // For linked table loops, show full editing modal
+  if (isLinkedTable) {
+    // Build table selector options
+    var linkedTableOptions = '<option value="">' + (currentLang === 'fr' ? '-- Choisir une table --' : '-- Choose a table --') + '</option>';
+    for (var t = 0; t < allTables.length; t++) {
+      if (allTables[t] !== selectedTable) {
+        var selectedOpt = allTables[t] === currentLinkedTable ? 'selected' : '';
+        linkedTableOptions += '<option value="' + allTables[t] + '" ' + selectedOpt + '>' + allTables[t] + '</option>';
+      }
+    }
+    
+    var linkedFormHtml = '<div style="text-align:left;">' +
+      '<div style="margin-bottom:15px;">' +
+      '<label style="display:block;margin-bottom:5px;font-weight:600;">' + (currentLang === 'fr' ? 'Table liée :' : 'Linked table:') + '</label>' +
+      '<select id="edit-linked-table" onchange="updateEditLinkedTableColumns()" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">' + linkedTableOptions + '</select>' +
+      '</div>' +
+      '<div style="margin-bottom:15px;">' +
+      '<label style="display:block;margin-bottom:5px;font-weight:600;">' + (currentLang === 'fr' ? 'Colonne de référence (vers ' + selectedTable + ') :' : 'Reference column (to ' + selectedTable + '):') + '</label>' +
+      '<select id="edit-linked-ref-col" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">' +
+      '<option value="' + currentLinkedRefCol + '" selected>' + currentLinkedRefCol + '</option>' +
+      '</select>' +
+      '</div>' +
+      '</div>';
+    
+    // Show modal and handle confirmation
+    setTimeout(function() {
+      // Load columns for the current linked table
+      updateEditLinkedTableColumns();
+    }, 100);
+    
+    showModal(currentLang === 'fr' ? '🔗 Modifier le tableau lié' : '🔗 Edit linked table', linkedFormHtml).then(function(confirmed) {
+      if (!confirmed) return;
+      
+      var newLinkedTable = document.getElementById('edit-linked-table').value;
+      var newRefCol = document.getElementById('edit-linked-ref-col').value;
+      
+      if (!newLinkedTable || !newRefCol) {
+        showToast(currentLang === 'fr' ? 'Veuillez sélectionner une table et une colonne de référence' : 'Please select a table and reference column', 'error');
+        return;
+      }
+      
+      // Update the loop comment
+      loopComment.textContent = 'LOOP:TABLE:' + newLinkedTable + ':' + newRefCol;
+      
+      // Update editor content
+      var updatedHtml = tableElement.outerHTML;
+      
+      showToast(currentLang === 'fr' ? 'Boucle mise à jour' : 'Loop updated', 'success');
+    });
+    return;
+  }
+  
   // Build column selector options
   var colOptions = '';
   for (var i = 0; i < tableColumns.length; i++) {
-    colOptions += '<option value="' + tableColumns[i] + '">' + tableColumns[i] + '</option>';
+    var selected = tableColumns[i] === currentFilterCol ? 'selected' : '';
+    colOptions += '<option value="' + tableColumns[i] + '" ' + selected + '>' + tableColumns[i] + '</option>';
   }
-
+  
   // Build view selector options
   var viewOptions = '<option value="">' + (currentLang === 'fr' ? '-- Choisir une vue --' : '-- Choose a view --') + '</option>';
   for (var v = 0; v < availableViews.length; v++) {
@@ -1417,16 +1392,18 @@ function editTableLoop(tableElement) {
     var selectedView = String(viewId) === currentViewId ? 'selected' : '';
     viewOptions += '<option value="' + viewId + '" ' + selectedView + '>' + viewName + hasFilters + '</option>';
   }
-
-  // Build table selector options (all tables except current)
-  var tableOptions = '<option value="">' + (currentLang === 'fr' ? '-- Choisir une table --' : '-- Choose a table --') + '</option>';
-  for (var t = 0; t < allTables.length; t++) {
-    if (allTables[t] !== selectedTable) {
-      var selectedOpt = allTables[t] === currentLinkedTable ? 'selected' : '';
-      tableOptions += '<option value="' + allTables[t] + '" ' + selectedOpt + '>' + allTables[t] + '</option>';
-    }
+  
+  // Build value options for current column
+  var uniqueVals = getUniqueValuesForColumn(currentFilterCol || tableColumns[0]);
+  var valOptions = '<option value="">' + (currentLang === 'fr' ? '-- Choisir une valeur --' : '-- Choose a value --') + '</option>';
+  for (var j = 0; j < uniqueVals.length; j++) {
+    var selVal = uniqueVals[j] === currentFilterVal ? 'selected' : '';
+    valOptions += '<option value="' + uniqueVals[j] + '" ' + selVal + '>' + uniqueVals[j] + '</option>';
   }
-
+  
+  // Determine which radio should be checked
+  var isFilterChecked = !isViewLinked && !isViewSelect;
+  
   var formHtml = '<div style="text-align:left;">' +
     '<div style="margin-bottom:15px;">' +
     '<label style="display:block;margin-bottom:8px;font-weight:600;">' + (currentLang === 'fr' ? 'Type de tableau :' : 'Table type:') + '</label>' +
@@ -1437,75 +1414,49 @@ function editTableLoop(tableElement) {
     '<input type="radio" name="edit-loop-type" value="viewselect" ' + (isViewSelect ? 'checked' : '') + ' style="margin-right:8px;">' +
     (currentLang === 'fr' ? 'Lié à une vue filtrée' : 'Linked to a filtered view') + '</label>' +
     '<label style="display:block;margin-bottom:5px;cursor:pointer;">' +
-    '<input type="radio" name="edit-loop-type" value="linkedtable" ' + (isLinkedTable ? 'checked' : '') + ' style="margin-right:8px;">' +
-    (currentLang === 'fr' ? 'Lié à une table externe' : 'Linked to external table') + '</label>' +
-    '<label style="display:block;margin-bottom:5px;cursor:pointer;">' +
-    '<input type="radio" name="edit-loop-type" value="filter" ' + (!isViewLinked && !isViewSelect && !isLinkedTable && !isMultiRef ? 'checked' : '') + ' style="margin-right:8px;">' +
+    '<input type="radio" name="edit-loop-type" value="filter" ' + (isFilterChecked ? 'checked' : '') + ' style="margin-right:8px;">' +
     (currentLang === 'fr' ? 'Avec filtre manuel' : 'With manual filter') + '</label>' +
-    '<label style="display:block;margin-bottom:5px;cursor:pointer;">' +
-    '<input type="radio" name="edit-loop-type" value="multiref" ' + (isMultiRef ? 'checked' : '') + ' style="margin-right:8px;">' +
-    (currentLang === 'fr' ? 'Colonnes de référence multiple' : 'Multiple reference columns') + '</label>' +
     '</div>' +
-
-    // View-select options
     '<div id="edit-view-select-options" style="' + (isViewSelect ? '' : 'display:none;') + 'border:1px solid #e5e7eb;padding:10px;border-radius:6px;margin-bottom:10px;background:#f0fdf4;">' +
     '<label style="display:block;margin-bottom:5px;font-weight:600;">' + (currentLang === 'fr' ? 'Vue à utiliser :' : 'View to use:') + '</label>' +
     '<select id="edit-loop-view-select" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">' + viewOptions + '</select>' +
     '</div>' +
-
-    // Linked table options
-    '<div id="edit-linked-table-options" style="' + (isLinkedTable ? '' : 'display:none;') + 'border:1px solid #e5e7eb;padding:10px;border-radius:6px;margin-bottom:10px;background:#fef3c7;">' +
-    '<div style="margin-bottom:10px;">' +
-    '<label style="display:block;margin-bottom:5px;font-weight:600;">' + (currentLang === 'fr' ? 'Table à afficher :' : 'Table to display:') + '</label>' +
-    '<select id="edit-linked-table" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">' + tableOptions + '</select>' +
-    '</div>' +
-    '<div style="margin-bottom:10px;">' +
-    '<label style="display:block;margin-bottom:5px;font-weight:600;">' + (currentLang === 'fr' ? 'Colonne de référence (vers ' + selectedTable + ') :' : 'Reference column (to ' + selectedTable + '):') + '</label>' +
-    '<select id="edit-linked-ref-col" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">' +
-    '<option value="' + currentLinkedRefCol + '" selected>' + currentLinkedRefCol + '</option>' +
-    '</select>' +
-    '</div>' +
-    '</div>' +
-
-    // MultiRef options
-    '<div id="edit-multiref-options" style="' + (isMultiRef ? '' : 'display:none;') + 'border:1px solid #e5e7eb;padding:10px;border-radius:6px;margin-bottom:10px;background:#e0f2fe;">' +
-    '<div style="margin-bottom:10px;">' +
-    '<label style="display:block;margin-bottom:5px;font-weight:600;">' + (currentLang === 'fr' ? 'Colonnes de référence multiple :' : 'Multiple reference columns:') + '</label>' +
-    '<div id="edit-multiref-cols-container" style="max-height:150px;overflow-y:auto;border:1px solid #eee;padding:8px;border-radius:4px;background:white;">';
-
-  // Add checkboxes for multiple reference columns
-  for (var j = 0; j < tableColumns.length; j++) {
-    var checked = (currentFirstRefCol === tableColumns[j] || currentSecondRefCol === tableColumns[j]) ? 'checked' : '';
-    formHtml += '<label style="display:block;margin-bottom:5px;cursor:pointer;">' +
-      '<input type="checkbox" name="edit-multiref-col" value="' + tableColumns[j] + '" ' + checked + ' style="margin-right:8px;">' +
-      tableColumns[j] + '</label>';
-  }
-
-  formHtml += '</div></div></div>' +
-
-    // Filter options
-    '<div id="edit-filter-options" style="' + (!isViewLinked && !isViewSelect && !isLinkedTable && !isMultiRef ? '' : 'display:none;') + 'border:1px solid #e5e7eb;padding:10px;border-radius:6px;background:#f9fafb;">' +
+    '<div id="edit-filter-options" style="' + (isFilterChecked ? '' : 'display:none;') + 'border:1px solid #e5e7eb;padding:10px;border-radius:6px;background:#f9fafb;">' +
     '<div style="margin-bottom:10px;">' +
     '<label style="display:block;margin-bottom:5px;font-weight:600;">' + (currentLang === 'fr' ? 'Colonne à filtrer :' : 'Column to filter:') + '</label>' +
     '<select id="edit-loop-filter-col" onchange="updateEditLoopValueOptions()" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">' + colOptions + '</select>' +
     '</div>' +
     '<div style="margin-bottom:10px;">' +
     '<label style="display:block;margin-bottom:5px;font-weight:600;">' + (currentLang === 'fr' ? 'Valeur à rechercher :' : 'Value to search:') + '</label>' +
-    '<select id="edit-loop-filter-val-select" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;margin-bottom:5px;">' +
-    '<option value="' + currentFilterVal + '" selected>' + currentFilterVal + '</option>' +
-    '</select>' +
+    '<select id="edit-loop-filter-val-select" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;margin-bottom:5px;">' + valOptions + '</select>' +
     '<input type="text" id="edit-loop-filter-val" value="' + currentFilterVal + '" placeholder="' + (currentLang === 'fr' ? 'Ou saisir manuellement...' : 'Or type manually...') + '" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;box-sizing:border-box;">' +
     '</div>' +
     '</div>' +
     '</div>';
-
-  // Show modal and handle confirmation
+  
+  // Add event listeners for radio buttons after modal opens
+  setTimeout(function() {
+    var radios = document.querySelectorAll('input[name="edit-loop-type"]');
+    radios.forEach(function(radio) {
+      radio.addEventListener('change', function() {
+        var filterOptions = document.getElementById('edit-filter-options');
+        var viewSelectOptions = document.getElementById('edit-view-select-options');
+        if (filterOptions) {
+          filterOptions.style.display = this.value === 'filter' ? 'block' : 'none';
+        }
+        if (viewSelectOptions) {
+          viewSelectOptions.style.display = this.value === 'viewselect' ? 'block' : 'none';
+        }
+      });
+    });
+  }, 100);
+  
   showModal(currentLang === 'fr' ? '✏️ Modifier la boucle' : '✏️ Edit loop', formHtml).then(function(confirmed) {
     if (!confirmed) return;
-
+    
     var loopType = document.querySelector('input[name="edit-loop-type"]:checked');
     var loopTypeValue = loopType ? loopType.value : 'view';
-
+    
     if (loopTypeValue === 'view') {
       loopComment.textContent = 'LOOP:*';
     } else if (loopTypeValue === 'viewselect') {
@@ -1516,25 +1467,6 @@ function editTableLoop(tableElement) {
       } else {
         loopComment.textContent = 'LOOP:*';
       }
-    } else if (loopTypeValue === 'linkedtable') {
-      var linkedTableSelect = document.getElementById('edit-linked-table');
-      var linkedRefColSelect = document.getElementById('edit-linked-ref-col');
-      var newLinkedTable = linkedTableSelect ? linkedTableSelect.value : '';
-      var newRefCol = linkedRefColSelect ? linkedRefColSelect.value : '';
-      if (newLinkedTable && newRefCol) {
-        loopComment.textContent = 'LOOP:TABLE:' + newLinkedTable + ':' + newRefCol;
-      }
-    } else if (loopTypeValue === 'multiref') {
-      var multirefCols = [];
-      var multirefCheckboxes = document.querySelectorAll('input[name="edit-multiref-col"]:checked');
-      multirefCheckboxes.forEach(function(cb) { multirefCols.push(cb.value); });
-
-      if (multirefCols.length === 0) {
-        showToast(currentLang === 'fr' ? 'Veuillez sélectionner au moins une colonne de référence multiple.' : 'Please select at least one multiple reference column.', 'error');
-        return;
-      }
-
-      loopComment.textContent = 'LOOP:MULTIREF:' + multirefCols.join(':');
     } else {
       var newFilterCol = document.getElementById('edit-loop-filter-col').value;
       var newFilterValSelect = document.getElementById('edit-loop-filter-val-select');
@@ -1542,36 +1474,10 @@ function editTableLoop(tableElement) {
       var newFilterVal = (newFilterValSelect && newFilterValSelect.value) || (newFilterValInput && newFilterValInput.value) || currentFilterVal;
       loopComment.textContent = 'LOOP:' + newFilterCol + '=' + newFilterVal;
     }
-
+    
     showToast(currentLang === 'fr' ? 'Boucle modifiée !' : 'Loop updated!', 'success');
     scheduleAutoSave();
   });
-
-  // Add event listeners for radio buttons after modal opens
-  setTimeout(function() {
-    var radios = document.querySelectorAll('input[name="edit-loop-type"]');
-    radios.forEach(function(radio) {
-      radio.addEventListener('change', function() {
-        var filterOptions = document.getElementById('edit-filter-options');
-        var viewSelectOptions = document.getElementById('edit-view-select-options');
-        var linkedTableOptions = document.getElementById('edit-linked-table-options');
-        var multirefOptions = document.getElementById('edit-multiref-options');
-
-        if (filterOptions) {
-          filterOptions.style.display = this.value === 'filter' ? 'block' : 'none';
-        }
-        if (viewSelectOptions) {
-          viewSelectOptions.style.display = this.value === 'viewselect' ? 'block' : 'none';
-        }
-        if (linkedTableOptions) {
-          linkedTableOptions.style.display = this.value === 'linkedtable' ? 'block' : 'none';
-        }
-        if (multirefOptions) {
-          multirefOptions.style.display = this.value === 'multiref' ? 'block' : 'none';
-        }
-      });
-    });
-  }, 100);
 }
 
 // Remove loop edit button if exists
@@ -1583,7 +1489,7 @@ function removeLoopEditButton() {
 // Show loop edit button near a table
 function showLoopEditButton(tableElement, event) {
   removeLoopEditButton();
-
+  
   var btn = document.createElement('button');
   btn.id = 'loop-edit-btn';
   btn.innerHTML = '✏️ ' + (currentLang === 'fr' ? 'Modifier la boucle' : 'Edit loop');
@@ -1593,7 +1499,7 @@ function showLoopEditButton(tableElement, event) {
     editTableLoop(tableElement);
     removeLoopEditButton();
   };
-
+  
   // Position near the click
   var editorArea = document.querySelector('.jodit-wysiwyg');
   if (editorArea) {
@@ -1602,7 +1508,7 @@ function showLoopEditButton(tableElement, event) {
     btn.style.top = (event.clientY - rect.top + editorArea.scrollTop - 40) + 'px';
     editorArea.style.position = 'relative';
     editorArea.appendChild(btn);
-
+    
     // Auto-hide after 5 seconds
     setTimeout(removeLoopEditButton, 5000);
   }
@@ -1613,12 +1519,6 @@ function showLoopEditButton(tableElement, event) {
 // =============================================================================
 
 function initEditor() {
-    var editorContainer = document.getElementById('editor-container');
-  if (!editorContainer) {
-    console.error('Editor container not found');
-    return;
-  }
-
   editorInstance = Jodit.make('#editor-container', {
     language: currentLang,
     minHeight: 500,
@@ -1635,48 +1535,6 @@ function initEditor() {
     addNewLineOnDBLClick: true,
     addNewLineDeltaShow: 20,
     addNewLineTagsTriggers: ['table', 'iframe', 'img', 'hr', 'jodit'],
-    events: {
-      change: function() {
-        scheduleAutoSave();
-      },
-      selectionchange: function() {
-        saveEditorSelection();
-      },
-      blur: function() {
-        saveEditorSelection();
-      },
-      click: function(e) {
-        saveEditorSelection();
-        var target = e.target;
-        var table = target.closest ? target.closest('table') : null;
-        if (!table) {
-          var el = target;
-          while (el && el.tagName !== 'TABLE') {
-            el = el.parentElement;
-          }
-          table = el;
-        }
-
-        if (table) {
-          var hasLoop = false;
-          var tbody = table.querySelector('tbody');
-          if (tbody) {
-            for (var i = 0; i < tbody.childNodes.length; i++) {
-              var node = tbody.childNodes[i];
-              if (node.nodeType === 8 && node.textContent.match(/^LOOP:/)) {
-                hasLoop = true;
-                break;
-              }
-            }
-          }
-          if (hasLoop) {
-            showLoopEditButton(table, e);
-            return;
-          }
-        }
-        removeLoopEditButton();
-      }
-    },
     controls: {
       insertparagraph: {
         name: 'insertparagraph',
@@ -1696,7 +1554,7 @@ function initEditor() {
               table = el;
             }
           }
-
+          
           if (table) {
             // Insert paragraph AFTER the table
             var p = document.createElement('p');
@@ -1749,18 +1607,18 @@ function initEditor() {
               <button id="layout-cancel" style="flex:1;padding:10px;background:#f1f5f9;border:none;border-radius:6px;cursor:pointer;">' + (currentLang === 'fr' ? 'Annuler' : 'Cancel') + '</button>\
             </div>\
           ';
-
+          
           var overlay = document.createElement('div');
           overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.3);z-index:9999;';
-
+          
           document.body.appendChild(overlay);
           document.body.appendChild(dialog);
-
+          
           dialog.querySelector('#layout-insert').addEventListener('click', function() {
             var type = dialog.querySelector('#layout-type').value;
             var html = '';
             var cellStyle = 'border:none;vertical-align:top;padding:10px;';
-
+            
             if (type === '2col') {
               html = '<table style="width:100%;border-collapse:collapse;border:none;"><tr>' +
                 '<td style="' + cellStyle + 'width:50%;">' + (currentLang === 'fr' ? '[Colonne 1]' : '[Column 1]') + '</td>' +
@@ -1783,18 +1641,18 @@ function initEditor() {
                 '<td style="' + cellStyle + 'width:30%;">' + (currentLang === 'fr' ? '[Barre latérale]' : '[Sidebar]') + '</td>' +
                 '</tr></table>';
             }
-
+            
             editor.selection.insertHTML(html);
-
+            
             document.body.removeChild(dialog);
             document.body.removeChild(overlay);
           });
-
+          
           dialog.querySelector('#layout-cancel').addEventListener('click', function() {
             document.body.removeChild(dialog);
             document.body.removeChild(overlay);
           });
-
+          
           overlay.addEventListener('click', function() {
             document.body.removeChild(dialog);
             document.body.removeChild(overlay);
@@ -1819,12 +1677,12 @@ function initEditor() {
               cell = el;
             }
           }
-
+          
           if (!cell) {
             alert(currentLang === 'fr' ? 'Placez le curseur dans une cellule de tableau' : 'Place cursor in a table cell');
             return;
           }
-
+          
           var dialog = document.createElement('div');
           dialog.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:white;padding:20px;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.3);z-index:10000;min-width:280px;';
           dialog.innerHTML = '\
@@ -1850,1036 +1708,1221 @@ function initEditor() {
               <button id="nested-cancel" style="flex:1;padding:10px;background:#f1f5f9;border:none;border-radius:6px;cursor:pointer;">' + (currentLang === 'fr' ? 'Annuler' : 'Cancel') + '</button>\
             </div>\
           ';
-
+          
           var overlay = document.createElement('div');
           overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.3);z-index:9999;';
-
+          
           document.body.appendChild(overlay);
           document.body.appendChild(dialog);
-
+          
           dialog.querySelector('#nested-insert').addEventListener('click', function() {
             var rows = parseInt(dialog.querySelector('#nested-rows').value) || 3;
             var cols = parseInt(dialog.querySelector('#nested-cols').value) || 3;
             var hasHeader = dialog.querySelector('#nested-header').checked;
-
+            
             var html = '<table style="width:100%;border-collapse:collapse;">';
             for (var r = 0; r < rows; r++) {
               html += '<tr>';
               for (var c = 0; c < cols; c++) {
                 var tag = (r === 0 && hasHeader) ? 'th' : 'td';
-                var tag = (r === 0 && hasHeader) ? 'th' : 'td';
-              var style = 'border:1px solid #000;padding:4px 8px;';
-              if (r === 0 && hasHeader) {
-                style += 'background:#f1f5f9;font-weight:bold;';
+                var style = 'border:1px solid #000;padding:4px 8px;';
+                if (r === 0 && hasHeader) {
+                  style += 'background:#f1f5f9;font-weight:bold;';
+                }
+                html += '<' + tag + ' style="' + style + '"></' + tag + '>';
               }
-              html += '<' + tag + ' style="' + style + '"></' + tag + '>';
+              html += '</tr>';
             }
-            html += '</tr>';
-          }
-          html += '</table>';
-
-          editor.selection.insertHTML(html);
-
-          document.body.removeChild(dialog);
-          document.body.removeChild(overlay);
-        });
-
-        dialog.querySelector('#nested-cancel').addEventListener('click', function() {
-          document.body.removeChild(dialog);
-          document.body.removeChild(overlay);
-        });
-
-        overlay.addEventListener('click', function() {
-          document.body.removeChild(dialog);
-          document.body.removeChild(overlay);
-        });
-      }
-    },
-    columnwidth: {
-      name: 'columnwidth',
-      iconURL: '',
-      tooltip: currentLang === 'fr' ? 'Largeur de la colonne' : 'Column width',
-      exec: function(editor) {
-        var selection = editor.selection;
-        var current = selection.current();
-        var cell = null;
-        if (current) {
-          cell = current.closest ? current.closest('td, th') : null;
-          if (!cell) {
-            var el = current;
-            while (el && el.tagName !== 'TD' && el.tagName !== 'TH') {
-              el = el.parentElement;
-            }
-            cell = el;
-          }
-        }
-
-        if (!cell) {
-          alert(currentLang === 'fr' ? 'Placez le curseur dans une cellule' : 'Place cursor in a cell');
-          return;
-        }
-
-        var table = cell.closest('table');
-        if (!table) return;
-
-        // Get column index
-        var colIndex = Array.from(cell.parentElement.children).indexOf(cell);
-
-        // Get current width
-        var currentWidth = cell.style.width || 'auto';
-        var widthValue = parseInt(currentWidth) || 100;
-        var widthUnit = currentWidth.includes('%') ? '%' : 'px';
-
-        var dialog = document.createElement('div');
-        dialog.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:white;padding:20px;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.3);z-index:10000;min-width:280px;';
-        dialog.innerHTML = '\
-          <h3 style="margin:0 0 15px 0;font-size:1.1em;">' + (currentLang === 'fr' ? 'Largeur de la colonne' : 'Column Width') + '</h3>\
-          <div style="margin-bottom:12px;">\
-            <label style="display:block;margin-bottom:4px;font-weight:500;">' + (currentLang === 'fr' ? 'Largeur' : 'Width') + '</label>\
-            <div style="display:flex;gap:8px;">\
-              <input type="number" id="col-width-value" value="' + widthValue + '" min="20" max="1000" style="flex:1;padding:8px;border:1px solid #e2e8f0;border-radius:4px;">\
-              <select id="col-width-unit" style="padding:8px;border:1px solid #e2e8f0;border-radius:4px;">\
-                <option value="px" ' + (widthUnit === 'px' ? 'selected' : '') + '>px</option>\
-                <option value="%" ' + (widthUnit === '%' ? 'selected' : '') + '>%</option>\
-              </select>\
-            </div>\
-          </div>\
-          <div style="margin-bottom:12px;">\
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">\
-              <input type="checkbox" id="col-width-all">\
-              ' + (currentLang === 'fr' ? 'Appliquer à toute la colonne' : 'Apply to entire column') + '\
-            </label>\
-          </div>\
-          <div style="display:flex;gap:10px;margin-top:15px;">\
-            <button id="col-width-apply" style="flex:1;padding:10px;background:#3b82f6;color:white;border:none;border-radius:6px;cursor:pointer;">' + (currentLang === 'fr' ? 'Appliquer' : 'Apply') + '</button>\
-            <button id="col-width-cancel" style="flex:1;padding:10px;background:#f1f5f9;border:none;border-radius:6px;cursor:pointer;">' + (currentLang === 'fr' ? 'Annuler' : 'Cancel') + '</button>\
-          </div>\
-        ';
-
-        var overlay = document.createElement('div');
-        overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.3);z-index:9999;';
-
-        document.body.appendChild(overlay);
-        document.body.appendChild(dialog);
-
-        dialog.querySelector('#col-width-apply').addEventListener('click', function() {
-          var value = dialog.querySelector('#col-width-value').value;
-          var unit = dialog.querySelector('#col-width-unit').value;
-          var applyAll = dialog.querySelector('#col-width-all').checked;
-          var widthStyle = value + unit;
-
-          if (applyAll) {
-            // Apply to all cells in this column
-            var rows = table.querySelectorAll('tr');
-            rows.forEach(function(row) {
-              var cells = row.querySelectorAll('td, th');
-              if (cells[colIndex]) {
-                cells[colIndex].style.width = widthStyle;
-              }
-            });
-          } else {
-            cell.style.width = widthStyle;
-          }
-
-          document.body.removeChild(dialog);
-          document.body.removeChild(overlay);
-        });
-
-        dialog.querySelector('#col-width-cancel').addEventListener('click', function() {
-          document.body.removeChild(dialog);
-          document.body.removeChild(overlay);
-        });
-
-        overlay.addEventListener('click', function() {
-          document.body.removeChild(dialog);
-          document.body.removeChild(overlay);
-        });
-      }
-    },
-    cellborder: {
-      name: 'cellborder',
-      iconURL: '',
-      tooltip: currentLang === 'fr' ? 'Bordures de la cellule' : 'Cell borders',
-      exec: function(editor) {
-        var selection = editor.selection;
-        var current = selection.current();
-        var cell = null;
-        if (current) {
-          cell = current.closest ? current.closest('td, th') : null;
-          if (!cell) {
-            var el = current;
-            while (el && el.tagName !== 'TD' && el.tagName !== 'TH') {
-              el = el.parentElement;
-            }
-            cell = el;
-          }
-        }
-
-        if (!cell) {
-          alert(currentLang === 'fr' ? 'Placez le curseur dans une cellule' : 'Place cursor in a cell');
-          return;
-        }
-
-        // Parse current border style
-        var currentBorder = cell.style.border || cell.style.borderTop || '1px solid #000';
-        var isInvisible = currentBorder.includes('transparent') || currentBorder === 'none' || currentBorder === '';
-        var currentColor = '#000000';
-        var currentWidth = '1px';
-        var currentStyle = 'solid';
-        var colorMatch = currentBorder.match(/#[0-9a-fA-F]{6}|#[0-9a-fA-F]{3}|rgb$[^)]+$/);
-        if (colorMatch) currentColor = colorMatch[0];
-        var widthMatch = currentBorder.match(/(\d+)px/);
-        if (widthMatch) currentWidth = widthMatch[1] + 'px';
-        // Detect border style
-        if (currentBorder.includes('dashed')) currentStyle = 'dashed';
-        else if (currentBorder.includes('dotted')) currentStyle = 'dotted';
-        else if (currentBorder.includes('double')) currentStyle = 'double';
-        else if (currentBorder.includes('groove')) currentStyle = 'groove';
-        else if (currentBorder.includes('ridge')) currentStyle = 'ridge';
-
-        var dialog = document.createElement('div');
-        dialog.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:white;padding:20px;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.3);z-index:10000;min-width:320px;';
-        dialog.innerHTML = '\
-          <h3 style="margin:0 0 15px 0;font-size:1.1em;">' + (currentLang === 'fr' ? 'Bordures de la cellule' : 'Cell Borders') + '</h3>\
-          <div style="margin-bottom:12px;">\
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">\
-              <input type="checkbox" id="cell-border-invisible" ' + (isInvisible ? 'checked' : '') + '>\
-              ' + (currentLang === 'fr' ? 'Bordures invisibles' : 'Invisible borders') + '\
-            </label>\
-          </div>\
-          <div id="cell-border-options" style="' + (isInvisible ? 'opacity:0.5;pointer-events:none;' : '') + '">\
-            <div style="margin-bottom:8px;font-weight:500;">' + (currentLang === 'fr' ? 'Couleur' : 'Color') + '</div>\
-            <input type="color" id="cell-border-color" value="' + currentColor + '" style="width:100%;height:36px;border:1px solid #e2e8f0;border-radius:4px;cursor:pointer;">\
-            <div style="margin-top:12px;font-weight:500;">' + (currentLang === 'fr' ? 'Type de filet' : 'Line style') + '</div>\
-            <select id="cell-border-style" style="width:100%;padding:8px;border:1px solid #e2e8f0;border-radius:4px;">\
-              <option value="solid" ' + (currentStyle === 'solid' ? 'selected' : '') + '>' + (currentLang === 'fr' ? '━━━ Plein' : '━━━ Solid') + '</option>\
-              <option value="dashed" ' + (currentStyle === 'dashed' ? 'selected' : '') + '>' + (currentLang === 'fr' ? '┅┅┅ Tirets' : '┅┅┅ Dashed') + '</option>\
-              <option value="dotted" ' + (currentStyle === 'dotted' ? 'selected' : '') + '>' + (currentLang === 'fr' ? '┈┈┈ Pointillé' : '┈┈┈ Dotted') + '</option>\
-              <option value="double" ' + (currentStyle === 'double' ? 'selected' : '') + '>' + (currentLang === 'fr' ? '═══ Double' : '═══ Double') + '</option>\
-              <option value="groove" ' + (currentStyle === 'groove' ? 'selected' : '') + '>' + (currentLang === 'fr' ? '▤▤▤ Rainure' : '▤▤▤ Groove') + '</option>\
-              <option value="ridge" ' + (currentStyle === 'ridge' ? 'selected' : '') + '>' + (currentLang === 'fr' ? '▥▥▥ Crête' : '▥▥▥ Ridge') + '</option>\
-            </select>\
-            <div style="margin-top:12px;font-weight:500;">' + (currentLang === 'fr' ? 'Épaisseur' : 'Thickness') + '</div>\
-            <select id="cell-border-width" style="width:100%;padding:8px;border:1px solid #e2e8f0;border-radius:4px;">\
-              <option value="0.5px" ' + (currentWidth === '0.5px' ? 'selected' : '') + '>0.5px - ' + (currentLang === 'fr' ? 'Très fin' : 'Hairline') + '</option>\
-              <option value="0.75px" ' + (currentWidth === '0.75px' ? 'selected' : '') + '>0.75px</option>\
-              <option value="1px" ' + (currentWidth === '1px' ? 'selected' : '') + '>1px - ' + (currentLang === 'fr' ? 'Fin' : 'Thin') + '</option>\
-              <option value="2px" ' + (currentWidth === '2px' ? 'selected' : '') + '>2px</option>\
-              <option value="3px" ' + (currentWidth === '3px' ? 'selected' : '') + '>3px - ' + (currentLang === 'fr' ? 'Moyen' : 'Medium') + '</option>\
-              <option value="4px" ' + (currentWidth === '4px' ? 'selected' : '') + '>4px</option>\
-              <option value="5px" ' + (currentWidth === '5px' ? 'selected' : '') + '>5px - ' + (currentLang === 'fr' ? 'Épais' : 'Thick') + '</option>\
-              <option value="6px" ' + (currentWidth === '6px' ? 'selected' : '') + '>6px</option>\
-            </select>\
-            <div style="margin-top:12px;font-weight:500;">' + (currentLang === 'fr' ? 'Côtés' : 'Sides') + '</div>\
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:4px;">\
-              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="cell-border-top" checked> ' + (currentLang === 'fr' ? 'Haut' : 'Top') + '</label>\
-              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="cell-border-bottom" checked> ' + (currentLang === 'fr' ? 'Bas' : 'Bottom') + '</label>\
-              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="cell-border-left" checked> ' + (currentLang === 'fr' ? 'Gauche' : 'Left') + '</label>\
-              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="cell-border-right" checked> ' + (currentLang === 'fr' ? 'Droite' : 'Right') + '</label>\
-            </div>\
-            <div style="margin-top:12px;padding:10px;background:#f8fafc;border-radius:6px;border:1px solid #e2e8f0;">\
-              <div style="font-weight:500;margin-bottom:6px;font-size:0.9em;">' + (currentLang === 'fr' ? 'Aperçu' : 'Preview') + '</div>\
-              <div id="cell-border-preview" style="width:100%;height:40px;background:white;border:2px solid #000;"></div>\
-            </div>\
-          </div>\
-          <div style="display:flex;gap:10px;margin-top:15px;">\
-            <button id="cell-border-apply" style="flex:1;padding:10px;background:#3b82f6;color:white;border:none;border-radius:6px;cursor:pointer;">' + (currentLang === 'fr' ? 'Appliquer' : 'Apply') + '</button>\
-            <button id="cell-border-cancel" style="flex:1;padding:10px;background:#f1f5f9;border:none;border-radius:6px;cursor:pointer;">' + (currentLang === 'fr' ? 'Annuler' : 'Cancel') + '</button>\
-          </div>\
-        ';
-
-        var overlay = document.createElement('div');
-        overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.3);z-index:9999;';
-
-        document.body.appendChild(overlay);
-        document.body.appendChild(dialog);
-
-        var invisibleCheck = dialog.querySelector('#cell-border-invisible');
-        var optionsGroup = dialog.querySelector('#cell-border-options');
-
-        invisibleCheck.addEventListener('change', function() {
-          optionsGroup.style.opacity = this.checked ? '0.5' : '1';
-          optionsGroup.style.pointerEvents = this.checked ? 'none' : 'auto';
-        });
-
-        // Update preview on change
-        function updatePreview() {
-          var preview = dialog.querySelector('#cell-border-preview');
-          if (preview) {
-            var c = dialog.querySelector('#cell-border-color').value;
-            var w = dialog.querySelector('#cell-border-width').value;
-            var s = dialog.querySelector('#cell-border-style').value;
-            preview.style.border = w + ' ' + s + ' ' + c;
-          }
-        }
-        dialog.querySelector('#cell-border-color').addEventListener('input', updatePreview);
-        dialog.querySelector('#cell-border-width').addEventListener('change', updatePreview);
-        dialog.querySelector('#cell-border-style').addEventListener('change', updatePreview);
-        updatePreview();
-
-        dialog.querySelector('#cell-border-apply').addEventListener('click', function() {
-          var invisible = invisibleCheck.checked;
-          var color = dialog.querySelector('#cell-border-color').value;
-          var width = dialog.querySelector('#cell-border-width').value;
-          var style = dialog.querySelector('#cell-border-style').value;
-          var top = dialog.querySelector('#cell-border-top').checked;
-          var bottom = dialog.querySelector('#cell-border-bottom').checked;
-          var left = dialog.querySelector('#cell-border-left').checked;
-          var right = dialog.querySelector('#cell-border-right').checked;
-
-          var borderValue = invisible ? 'none' : width + ' ' + style + ' ' + color;
-          var noBorder = 'none';
-
-          cell.style.borderTop = top ? borderValue : noBorder;
-          cell.style.borderBottom = bottom ? borderValue : noBorder;
-          cell.style.borderLeft = left ? borderValue : noBorder;
-          cell.style.borderRight = right ? borderValue : noBorder;
-
-          document.body.removeChild(dialog);
-          document.body.removeChild(overlay);
-        });
-
-        dialog.querySelector('#cell-border-cancel').addEventListener('click', function() {
-          document.body.removeChild(dialog);
-          document.body.removeChild(overlay);
-        });
-
-        overlay.addEventListener('click', function() {
-          document.body.removeChild(dialog);
-          document.body.removeChild(overlay);
-        });
-      }
-    },
-    tableborder: {
-      name: 'tableborder',
-      iconURL: '',
-      tooltip: currentLang === 'fr' ? 'Bordures du tableau (couleur/invisible)' : 'Table borders (color/invisible)',
-      exec: function(editor) {
-        var selection = editor.selection;
-        var current = selection.current();
-        var table = null;
-        if (current) {
-          table = current.closest ? current.closest('table') : null;
-          if (!table) {
-            var el = current;
-            while (el && el.tagName !== 'TABLE') {
-              el = el.parentElement;
-            }
-            table = el;
-          }
-        }
-
-        if (!table) {
-          alert(currentLang === 'fr' ? 'Placez le curseur dans un tableau' : 'Place cursor in a table');
-          return;
-        }
-
-        // Show border options dialog
-        var currentBorder = table.style.border || '1px solid #000';
-        var isInvisible = currentBorder.includes('transparent') || currentBorder === 'none' || currentBorder === '';
-        var currentColor = '#000000';
-        var currentWidth = '1px';
-        var currentStyle = 'solid';
-        var colorMatch = currentBorder.match(/#[0-9a-fA-F]{6}|#[0-9a-fA-F]{3}|rgb$[^)]+$/);
-        if (colorMatch) currentColor = colorMatch[0];
-        var widthMatch = currentBorder.match(/(\d+)px/);
-        if (widthMatch) currentWidth = widthMatch[1] + 'px';
-        if (currentBorder.includes('dashed')) currentStyle = 'dashed';
-        else if (currentBorder.includes('dotted')) currentStyle = 'dotted';
-        else if (currentBorder.includes('double')) currentStyle = 'double';
-        else if (currentBorder.includes('groove')) currentStyle = 'groove';
-        else if (currentBorder.includes('ridge')) currentStyle = 'ridge';
-
-        var dialog = document.createElement('div');
-        dialog.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:white;padding:20px;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.3);z-index:10000;min-width:320px;';
-        dialog.innerHTML = `
-          <h3 style="margin:0 0 15px 0;font-size:1.1em;">\${currentLang === 'fr' ? 'Bordures du tableau' : 'Table Borders'}</h3>
-          <div style="margin-bottom:12px;">
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-              <input type="checkbox" id="border-invisible" \${isInvisible ? 'checked' : ''}>
-              ${currentLang === 'fr' ? 'Bordures invisibles' : 'Invisible borders'}
-            </label>
-          </div>
-          <div id="border-color-group" style="${isInvisible ? 'opacity:0.5;pointer-events:none;' : ''}">
-            <div style="margin-bottom:8px;font-weight:500;">${currentLang === 'fr' ? 'Couleur des bordures' : 'Border color'}</div>
-            <input type="color" id="border-color" value="${currentColor}" style="width:100%;height:36px;border:1px solid #e2e8f0;border-radius:4px;cursor:pointer;">
-            <div style="margin-top:12px;font-weight:500;">\${currentLang === 'fr' ? 'Type de filet' : 'Line style'}</div>
-            <select id="border-style" style="width:100%;padding:8px;border:1px solid #e2e8f0;border-radius:4px;">
-              <option value="solid" \${currentStyle === 'solid' ? 'selected' : ''}>\${currentLang === 'fr' ? '━━━ Plein' : '━━━ Solid'}</option>
-              <option value="dashed" \${currentStyle === 'dashed' ? 'selected' : ''}>\${currentLang === 'fr' ? '┅┅┅ Tirets' : '┅┅┅ Dashed'}</option>
-              <option value="dotted" \${currentStyle === 'dotted' ? 'selected' : ''}>\${currentLang === 'fr' ? '┈┈┈ Pointillé' : '┈┈┈ Dotted'}</option>
-              <option value="double" \${currentStyle === 'double' ? 'selected' : ''}>\${currentLang === 'fr' ? '═══ Double' : '═══ Double'}</option>
-              <option value="groove" \${currentStyle === 'groove' ? 'selected' : ''}>\${currentLang === 'fr' ? '▤▤▤ Rainure' : '▤▤▤ Groove'}</option>
-              <option value="ridge" \${currentStyle === 'ridge' ? 'selected' : ''}>${currentLang === 'fr' ? '▥▥▥ Crête' : '▥▥▥ Ridge'}</option>
-            </select>
-            <div style="margin-top:12px;font-weight:500;">${currentLang === 'fr' ? 'Épaisseur' : 'Thickness'}</div>
-            <select id="border-width" style="width:100%;padding:8px;border:1px solid #e2e8f0;border-radius:4px;">
-              <option value="0.5px" \${currentWidth === '0.5px' ? 'selected' : ''}>0.5px - \${currentLang === 'fr' ? 'Très fin' : 'Hairline'}</option>
-              <option value="0.75px" \${currentWidth === '0.75px' ? 'selected' : ''}>0.75px</option>
-              <option value="1px" \${currentWidth === '1px' ? 'selected' : ''}>1px - \${currentLang === 'fr' ? 'Fin' : 'Thin'}</option>
-              <option value="2px" \${currentWidth === '2px' ? 'selected' : ''}>2px</option>
-              <option value="3px" \${currentWidth === '3px' ? 'selected' : ''}>3px - \${currentLang === 'fr' ? 'Moyen' : 'Medium'}</option>
-              <option value="4px" \${currentWidth === '4px' ? 'selected' : ''}>4px</option>
-              <option value="5px" \${currentWidth === '5px' ? 'selected' : ''}>5px - \${currentLang === 'fr' ? 'Épais' : 'Thick'}</option>
-              <option value="6px" \${currentWidth === '6px' ? 'selected' : ''}>6px</option>
-            </select>
-            <div style="margin-top:12px;padding:10px;background:#f8fafc;border-radius:6px;border:1px solid #e2e8f0;">
-              <div style="font-weight:500;margin-bottom:6px;font-size:0.9em;">\${currentLang === 'fr' ? 'Aperçu' : 'Preview'}</div>
-              <div id="border-preview" style="width:100%;height:40px;background:white;border:2px solid #000;"></div>
-            </div>
-          </div>
-          <div style="display:flex;gap:10px;margin-top:15px;">
-            <button id="border-apply" style="flex:1;padding:10px;background:#3b82f6;color:white;border:none;border-radius:6px;cursor:pointer;">\${currentLang === 'fr' ? 'Appliquer' : 'Apply'}</button>
-            <button id="border-cancel" style="flex:1;padding:10px;background:#f1f5f9;border:none;border-radius:6px;cursor:pointer;">\${currentLang === 'fr' ? 'Annuler' : 'Cancel'}</button>
-          </div>
-        `;
-
-        var overlay = document.createElement('div');
-        overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.3);z-index:9999;';
-
-        document.body.appendChild(overlay);
-        document.body.appendChild(dialog);
-
-        var invisibleCheck = dialog.querySelector('#border-invisible');
-        var colorGroup = dialog.querySelector('#border-color-group');
-
-        invisibleCheck.addEventListener('change', function() {
-          colorGroup.style.opacity = this.checked ? '0.5' : '1';
-          colorGroup.style.pointerEvents = this.checked ? 'none' : 'auto';
-        });
-
-        // Update preview on change
-        function updateTablePreview() {
-          var preview = dialog.querySelector('#border-preview');
-          if (preview) {
-            var c = dialog.querySelector('#border-color').value;
-            var w = dialog.querySelector('#border-width').value;
-            var s = dialog.querySelector('#border-style').value;
-            preview.style.border = w + ' ' + s + ' ' + c;
-          }
-        }
-        dialog.querySelector('#border-color').addEventListener('input', updateTablePreview);
-        dialog.querySelector('#border-width').addEventListener('change', updateTablePreview);
-        dialog.querySelector('#border-style').addEventListener('change', updateTablePreview);
-        updateTablePreview();
-
-        dialog.querySelector('#border-apply').addEventListener('click', function() {
-          var invisible = invisibleCheck.checked;
-          var color = dialog.querySelector('#border-color').value;
-          var width = dialog.querySelector('#border-width').value;
-          var style = dialog.querySelector('#border-style').value;
-
-          var borderValue = invisible ? 'none' : width + ' ' + style + ' ' + color;
-
-          // Apply to table
-          table.style.border = borderValue;
-          table.style.borderCollapse = 'collapse';
-
-          // Apply to all cells
-          var cells = table.querySelectorAll('td, th');
-          cells.forEach(function(cell) {
-            cell.style.border = borderValue;
+            html += '</table>';
+            
+            editor.selection.insertHTML(html);
+            
+            document.body.removeChild(dialog);
+            document.body.removeChild(overlay);
           });
-
-          document.body.removeChild(dialog);
-          document.body.removeChild(overlay);
-        });
-
-        dialog.querySelector('#border-cancel').addEventListener('click', function() {
-          document.body.removeChild(dialog);
-          document.body.removeChild(overlay);
-        });
-
-        overlay.addEventListener('click', function() {
-          document.body.removeChild(dialog);
-          document.body.removeChild(overlay);
-        });
-      }
-    },
-    verticaltext: {
-      name: 'verticaltext',
-      iconURL: '',
-      tooltip: currentLang === 'fr' ? 'Texte vertical (cliquer pour changer le sens)' : 'Vertical text (click to change direction)',
-      exec: function(editor) {
-        var selection = editor.selection;
-        var current = selection.current();
-        if (current) {
-          // Find the closest cell (td or th)
-          var cell = current.closest ? current.closest('td, th') : null;
+          
+          dialog.querySelector('#nested-cancel').addEventListener('click', function() {
+            document.body.removeChild(dialog);
+            document.body.removeChild(overlay);
+          });
+          
+          overlay.addEventListener('click', function() {
+            document.body.removeChild(dialog);
+            document.body.removeChild(overlay);
+          });
+        }
+      },
+      columnwidth: {
+        name: 'columnwidth',
+        iconURL: '',
+        tooltip: currentLang === 'fr' ? 'Largeur de la colonne' : 'Column width',
+        exec: function(editor) {
+          var selection = editor.selection;
+          var current = selection.current();
+          var cell = null;
+          if (current) {
+            cell = current.closest ? current.closest('td, th') : null;
+            if (!cell) {
+              var el = current;
+              while (el && el.tagName !== 'TD' && el.tagName !== 'TH') {
+                el = el.parentElement;
+              }
+              cell = el;
+            }
+          }
+          
           if (!cell) {
-            var el = current;
-            while (el && el.tagName !== 'TD' && el.tagName !== 'TH') {
-              el = el.parentElement;
-            }
-            cell = el;
-          }
-          if (cell) {
-            // Cycle through: normal -> vertical-rl (bottom to top) -> vertical-lr (top to bottom) -> normal
-            var currentMode = cell.style.writingMode;
-            if (currentMode === 'vertical-rl') {
-              // Switch to vertical-lr (top to bottom, text upright)
-              cell.style.writingMode = 'vertical-lr';
-              cell.style.textOrientation = 'mixed';
-              cell.style.transform = 'rotate(180deg)';
-              cell.style.whiteSpace = 'nowrap';
-            } else if (currentMode === 'vertical-lr') {
-              // Back to normal
-              cell.style.writingMode = '';
-              cell.style.textOrientation = '';
-              cell.style.transform = '';
-              cell.style.whiteSpace = '';
-            } else {
-              // Start with vertical-rl (bottom to top)
-              cell.style.writingMode = 'vertical-rl';
-              cell.style.textOrientation = 'mixed';
-              cell.style.transform = '';
-              cell.style.whiteSpace = 'nowrap';
-            }
-          } else {
-            // Not in a table cell, wrap selection in a span
-            var html = selection.html;
-            if (html) {
-              selection.insertHTML('<span style="writing-mode:vertical-rl;text-orientation:mixed;display:inline-block;">' + html + '</span>');
-            }
-          }
-        }
-      }
-    }
-  },
-  buttons: [
-    'bold', 'italic', 'underline', 'strikethrough', '|',
-    'font', 'fontsize', '|',
-    'brush', '|',
-    'paragraph', '|',
-    'ul', 'ol', '|',
-    'outdent', 'indent', '|',
-    'align', 'verticaltext', '|',
-    'table', 'tablelayout', 'nestedtable', '|',
-    'tableborder', 'cellborder', 'columnwidth', '|',
-    'link', 'image', '|',
-    'hr', 'insertparagraph', 'pagebreak', '|',
-    'undo', 'redo', '|',
-    'eraser', 'source', 'fullsize', 'print'
-  ],
-  style: {
-    'font-family': '"Times New Roman", Times, serif',
-    'font-size': '14px',
-    'line-height': '1.6'
-  },
-  iframe: false,
-  showCharsCounter: false,
-  showWordsCounter: false,
-  showXPathInStatusbar: false,
-  events: {
-    change: function() {
-      scheduleAutoSave();
-    },
-    selectionchange: function() {
-      // Save cursor position whenever selection changes
-      saveEditorSelection();
-    },
-    blur: function() {
-      // Save cursor position when editor loses focus
-      saveEditorSelection();
-    },
-    click: function(e) {
-      // Save cursor position on click
-      saveEditorSelection();
-      // Check if clicked on a table with loop
-      var target = e.target;
-      var table = target.closest ? target.closest('table') : null;
-      if (!table) {
-        // Try parent elements
-        var el = target;
-        while (el && el.tagName !== 'TABLE') {
-          el = el.parentElement;
-        }
-        table = el;
-      }
-
-      if (table) {
-        // Check if this table has a loop comment
-        var tbody = table.querySelector('tbody');
-        if (tbody) {
-          var hasLoop = false;
-          for (var i = 0; i < tbody.childNodes.length; i++) {
-            var node = tbody.childNodes[i];
-            if (node.nodeType === 8 && node.textContent.match(/^LOOP:/)) {
-              hasLoop = true;
-              break;
-            }
-          }
-          if (hasLoop) {
-            showLoopEditButton(table, e);
+            alert(currentLang === 'fr' ? 'Placez le curseur dans une cellule' : 'Place cursor in a cell');
             return;
           }
+          
+          var table = cell.closest('table');
+          if (!table) return;
+          
+          // Get column index
+          var colIndex = Array.from(cell.parentElement.children).indexOf(cell);
+          
+          // Get current width
+          var currentWidth = cell.style.width || 'auto';
+          var widthValue = parseInt(currentWidth) || 100;
+          var widthUnit = currentWidth.includes('%') ? '%' : 'px';
+          
+          var dialog = document.createElement('div');
+          dialog.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:white;padding:20px;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.3);z-index:10000;min-width:280px;';
+          dialog.innerHTML = '\
+            <h3 style="margin:0 0 15px 0;font-size:1.1em;">' + (currentLang === 'fr' ? 'Largeur de la colonne' : 'Column Width') + '</h3>\
+            <div style="margin-bottom:12px;">\
+              <label style="display:block;margin-bottom:4px;font-weight:500;">' + (currentLang === 'fr' ? 'Largeur' : 'Width') + '</label>\
+              <div style="display:flex;gap:8px;">\
+                <input type="number" id="col-width-value" value="' + widthValue + '" min="20" max="1000" style="flex:1;padding:8px;border:1px solid #e2e8f0;border-radius:4px;">\
+                <select id="col-width-unit" style="padding:8px;border:1px solid #e2e8f0;border-radius:4px;">\
+                  <option value="px" ' + (widthUnit === 'px' ? 'selected' : '') + '>px</option>\
+                  <option value="%" ' + (widthUnit === '%' ? 'selected' : '') + '>%</option>\
+                </select>\
+              </div>\
+            </div>\
+            <div style="margin-bottom:12px;">\
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">\
+                <input type="checkbox" id="col-width-all">\
+                ' + (currentLang === 'fr' ? 'Appliquer à toute la colonne' : 'Apply to entire column') + '\
+              </label>\
+            </div>\
+            <div style="display:flex;gap:10px;margin-top:15px;">\
+              <button id="col-width-apply" style="flex:1;padding:10px;background:#3b82f6;color:white;border:none;border-radius:6px;cursor:pointer;">' + (currentLang === 'fr' ? 'Appliquer' : 'Apply') + '</button>\
+              <button id="col-width-cancel" style="flex:1;padding:10px;background:#f1f5f9;border:none;border-radius:6px;cursor:pointer;">' + (currentLang === 'fr' ? 'Annuler' : 'Cancel') + '</button>\
+            </div>\
+          ';
+          
+          var overlay = document.createElement('div');
+          overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.3);z-index:9999;';
+          
+          document.body.appendChild(overlay);
+          document.body.appendChild(dialog);
+          
+          dialog.querySelector('#col-width-apply').addEventListener('click', function() {
+            var value = dialog.querySelector('#col-width-value').value;
+            var unit = dialog.querySelector('#col-width-unit').value;
+            var applyAll = dialog.querySelector('#col-width-all').checked;
+            var widthStyle = value + unit;
+            
+            if (applyAll) {
+              // Apply to all cells in this column
+              var rows = table.querySelectorAll('tr');
+              rows.forEach(function(row) {
+                var cells = row.querySelectorAll('td, th');
+                if (cells[colIndex]) {
+                  cells[colIndex].style.width = widthStyle;
+                }
+              });
+            } else {
+              cell.style.width = widthStyle;
+            }
+            
+            document.body.removeChild(dialog);
+            document.body.removeChild(overlay);
+          });
+          
+          dialog.querySelector('#col-width-cancel').addEventListener('click', function() {
+            document.body.removeChild(dialog);
+            document.body.removeChild(overlay);
+          });
+          
+          overlay.addEventListener('click', function() {
+            document.body.removeChild(dialog);
+            document.body.removeChild(overlay);
+          });
+        }
+      },
+      cellborder: {
+        name: 'cellborder',
+        iconURL: '',
+        tooltip: currentLang === 'fr' ? 'Bordures de la cellule' : 'Cell borders',
+        exec: function(editor) {
+          var selection = editor.selection;
+          var current = selection.current();
+          var cell = null;
+          if (current) {
+            cell = current.closest ? current.closest('td, th') : null;
+            if (!cell) {
+              var el = current;
+              while (el && el.tagName !== 'TD' && el.tagName !== 'TH') {
+                el = el.parentElement;
+              }
+              cell = el;
+            }
+          }
+          
+          if (!cell) {
+            alert(currentLang === 'fr' ? 'Placez le curseur dans une cellule' : 'Place cursor in a cell');
+            return;
+          }
+          
+          // Parse current border style
+          var currentBorder = cell.style.border || cell.style.borderTop || '1px solid #000';
+          var isInvisible = currentBorder.includes('transparent') || currentBorder === 'none' || currentBorder === '';
+          var currentColor = '#000000';
+          var currentWidth = '1px';
+          var currentStyle = 'solid';
+          var colorMatch = currentBorder.match(/#[0-9a-fA-F]{6}|#[0-9a-fA-F]{3}|rgb\([^)]+\)/);
+          if (colorMatch) currentColor = colorMatch[0];
+          var widthMatch = currentBorder.match(/(\d+)px/);
+          if (widthMatch) currentWidth = widthMatch[1] + 'px';
+          // Detect border style
+          if (currentBorder.includes('dashed')) currentStyle = 'dashed';
+          else if (currentBorder.includes('dotted')) currentStyle = 'dotted';
+          else if (currentBorder.includes('double')) currentStyle = 'double';
+          else if (currentBorder.includes('groove')) currentStyle = 'groove';
+          else if (currentBorder.includes('ridge')) currentStyle = 'ridge';
+          
+          var dialog = document.createElement('div');
+          dialog.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:white;padding:20px;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.3);z-index:10000;min-width:320px;';
+          dialog.innerHTML = '\
+            <h3 style="margin:0 0 15px 0;font-size:1.1em;">' + (currentLang === 'fr' ? 'Bordures de la cellule' : 'Cell Borders') + '</h3>\
+            <div style="margin-bottom:12px;">\
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">\
+                <input type="checkbox" id="cell-border-invisible" ' + (isInvisible ? 'checked' : '') + '>\
+                ' + (currentLang === 'fr' ? 'Bordures invisibles' : 'Invisible borders') + '\
+              </label>\
+            </div>\
+            <div id="cell-border-options" style="' + (isInvisible ? 'opacity:0.5;pointer-events:none;' : '') + '">\
+              <div style="margin-bottom:8px;font-weight:500;">' + (currentLang === 'fr' ? 'Couleur' : 'Color') + '</div>\
+              <input type="color" id="cell-border-color" value="' + currentColor + '" style="width:100%;height:36px;border:1px solid #e2e8f0;border-radius:4px;cursor:pointer;">\
+              <div style="margin-top:12px;font-weight:500;">' + (currentLang === 'fr' ? 'Type de filet' : 'Line style') + '</div>\
+              <select id="cell-border-style" style="width:100%;padding:8px;border:1px solid #e2e8f0;border-radius:4px;">\
+                <option value="solid" ' + (currentStyle === 'solid' ? 'selected' : '') + '>' + (currentLang === 'fr' ? '━━━ Plein' : '━━━ Solid') + '</option>\
+                <option value="dashed" ' + (currentStyle === 'dashed' ? 'selected' : '') + '>' + (currentLang === 'fr' ? '┅┅┅ Tirets' : '┅┅┅ Dashed') + '</option>\
+                <option value="dotted" ' + (currentStyle === 'dotted' ? 'selected' : '') + '>' + (currentLang === 'fr' ? '┈┈┈ Pointillé' : '┈┈┈ Dotted') + '</option>\
+                <option value="double" ' + (currentStyle === 'double' ? 'selected' : '') + '>' + (currentLang === 'fr' ? '═══ Double' : '═══ Double') + '</option>\
+                <option value="groove" ' + (currentStyle === 'groove' ? 'selected' : '') + '>' + (currentLang === 'fr' ? '▤▤▤ Rainure' : '▤▤▤ Groove') + '</option>\
+                <option value="ridge" ' + (currentStyle === 'ridge' ? 'selected' : '') + '>' + (currentLang === 'fr' ? '▥▥▥ Crête' : '▥▥▥ Ridge') + '</option>\
+              </select>\
+              <div style="margin-top:12px;font-weight:500;">' + (currentLang === 'fr' ? 'Épaisseur' : 'Thickness') + '</div>\
+              <select id="cell-border-width" style="width:100%;padding:8px;border:1px solid #e2e8f0;border-radius:4px;">\
+                <option value="0.5px" ' + (currentWidth === '0.5px' ? 'selected' : '') + '>0.5px - ' + (currentLang === 'fr' ? 'Très fin' : 'Hairline') + '</option>\
+                <option value="0.75px" ' + (currentWidth === '0.75px' ? 'selected' : '') + '>0.75px</option>\
+                <option value="1px" ' + (currentWidth === '1px' ? 'selected' : '') + '>1px - ' + (currentLang === 'fr' ? 'Fin' : 'Thin') + '</option>\
+                <option value="2px" ' + (currentWidth === '2px' ? 'selected' : '') + '>2px</option>\
+                <option value="3px" ' + (currentWidth === '3px' ? 'selected' : '') + '>3px - ' + (currentLang === 'fr' ? 'Moyen' : 'Medium') + '</option>\
+                <option value="4px" ' + (currentWidth === '4px' ? 'selected' : '') + '>4px</option>\
+                <option value="5px" ' + (currentWidth === '5px' ? 'selected' : '') + '>5px - ' + (currentLang === 'fr' ? 'Épais' : 'Thick') + '</option>\
+                <option value="6px" ' + (currentWidth === '6px' ? 'selected' : '') + '>6px</option>\
+              </select>\
+              <div style="margin-top:12px;font-weight:500;">' + (currentLang === 'fr' ? 'Côtés' : 'Sides') + '</div>\
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:4px;">\
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="cell-border-top" checked> ' + (currentLang === 'fr' ? 'Haut' : 'Top') + '</label>\
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="cell-border-bottom" checked> ' + (currentLang === 'fr' ? 'Bas' : 'Bottom') + '</label>\
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="cell-border-left" checked> ' + (currentLang === 'fr' ? 'Gauche' : 'Left') + '</label>\
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="cell-border-right" checked> ' + (currentLang === 'fr' ? 'Droite' : 'Right') + '</label>\
+              </div>\
+              <div style="margin-top:12px;padding:10px;background:#f8fafc;border-radius:6px;border:1px solid #e2e8f0;">\
+                <div style="font-weight:500;margin-bottom:6px;font-size:0.9em;">' + (currentLang === 'fr' ? 'Aperçu' : 'Preview') + '</div>\
+                <div id="cell-border-preview" style="width:100%;height:40px;background:white;border:2px solid #000;"></div>\
+              </div>\
+            </div>\
+            <div style="display:flex;gap:10px;margin-top:15px;">\
+              <button id="cell-border-apply" style="flex:1;padding:10px;background:#3b82f6;color:white;border:none;border-radius:6px;cursor:pointer;">' + (currentLang === 'fr' ? 'Appliquer' : 'Apply') + '</button>\
+              <button id="cell-border-cancel" style="flex:1;padding:10px;background:#f1f5f9;border:none;border-radius:6px;cursor:pointer;">' + (currentLang === 'fr' ? 'Annuler' : 'Cancel') + '</button>\
+            </div>\
+          ';
+          
+          var overlay = document.createElement('div');
+          overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.3);z-index:9999;';
+          
+          document.body.appendChild(overlay);
+          document.body.appendChild(dialog);
+          
+          var invisibleCheck = dialog.querySelector('#cell-border-invisible');
+          var optionsGroup = dialog.querySelector('#cell-border-options');
+          
+          invisibleCheck.addEventListener('change', function() {
+            optionsGroup.style.opacity = this.checked ? '0.5' : '1';
+            optionsGroup.style.pointerEvents = this.checked ? 'none' : 'auto';
+          });
+          
+          // Update preview on change
+          function updatePreview() {
+            var preview = dialog.querySelector('#cell-border-preview');
+            if (preview) {
+              var c = dialog.querySelector('#cell-border-color').value;
+              var w = dialog.querySelector('#cell-border-width').value;
+              var s = dialog.querySelector('#cell-border-style').value;
+              preview.style.border = w + ' ' + s + ' ' + c;
+            }
+          }
+          dialog.querySelector('#cell-border-color').addEventListener('input', updatePreview);
+          dialog.querySelector('#cell-border-width').addEventListener('change', updatePreview);
+          dialog.querySelector('#cell-border-style').addEventListener('change', updatePreview);
+          updatePreview();
+          
+          dialog.querySelector('#cell-border-apply').addEventListener('click', function() {
+            var invisible = invisibleCheck.checked;
+            var color = dialog.querySelector('#cell-border-color').value;
+            var width = dialog.querySelector('#cell-border-width').value;
+            var style = dialog.querySelector('#cell-border-style').value;
+            var top = dialog.querySelector('#cell-border-top').checked;
+            var bottom = dialog.querySelector('#cell-border-bottom').checked;
+            var left = dialog.querySelector('#cell-border-left').checked;
+            var right = dialog.querySelector('#cell-border-right').checked;
+            
+            var borderValue = invisible ? 'none' : width + ' ' + style + ' ' + color;
+            var noBorder = 'none';
+            
+            cell.style.borderTop = top ? borderValue : noBorder;
+            cell.style.borderBottom = bottom ? borderValue : noBorder;
+            cell.style.borderLeft = left ? borderValue : noBorder;
+            cell.style.borderRight = right ? borderValue : noBorder;
+            
+            document.body.removeChild(dialog);
+            document.body.removeChild(overlay);
+          });
+          
+          dialog.querySelector('#cell-border-cancel').addEventListener('click', function() {
+            document.body.removeChild(dialog);
+            document.body.removeChild(overlay);
+          });
+          
+          overlay.addEventListener('click', function() {
+            document.body.removeChild(dialog);
+            document.body.removeChild(overlay);
+          });
+        }
+      },
+      tableborder: {
+        name: 'tableborder',
+        iconURL: '',
+        tooltip: currentLang === 'fr' ? 'Bordures du tableau (couleur/invisible)' : 'Table borders (color/invisible)',
+        exec: function(editor) {
+          var selection = editor.selection;
+          var current = selection.current();
+          var table = null;
+          if (current) {
+            table = current.closest ? current.closest('table') : null;
+            if (!table) {
+              var el = current;
+              while (el && el.tagName !== 'TABLE') {
+                el = el.parentElement;
+              }
+              table = el;
+            }
+          }
+          
+          if (!table) {
+            alert(currentLang === 'fr' ? 'Placez le curseur dans un tableau' : 'Place cursor in a table');
+            return;
+          }
+          
+          // Show border options dialog
+          var currentBorder = table.style.border || '1px solid #000';
+          var isInvisible = currentBorder.includes('transparent') || currentBorder === 'none' || currentBorder === '';
+          var currentColor = '#000000';
+          var currentWidth = '1px';
+          var currentStyle = 'solid';
+          var colorMatch = currentBorder.match(/#[0-9a-fA-F]{6}|#[0-9a-fA-F]{3}|rgb\([^)]+\)/);
+          if (colorMatch) currentColor = colorMatch[0];
+          var widthMatch = currentBorder.match(/(\d+)px/);
+          if (widthMatch) currentWidth = widthMatch[1] + 'px';
+          if (currentBorder.includes('dashed')) currentStyle = 'dashed';
+          else if (currentBorder.includes('dotted')) currentStyle = 'dotted';
+          else if (currentBorder.includes('double')) currentStyle = 'double';
+          else if (currentBorder.includes('groove')) currentStyle = 'groove';
+          else if (currentBorder.includes('ridge')) currentStyle = 'ridge';
+          
+          var dialog = document.createElement('div');
+          dialog.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:white;padding:20px;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.3);z-index:10000;min-width:320px;';
+          dialog.innerHTML = `
+            <h3 style="margin:0 0 15px 0;font-size:1.1em;">${currentLang === 'fr' ? 'Bordures du tableau' : 'Table Borders'}</h3>
+            <div style="margin-bottom:12px;">
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                <input type="checkbox" id="border-invisible" ${isInvisible ? 'checked' : ''}>
+                ${currentLang === 'fr' ? 'Bordures invisibles' : 'Invisible borders'}
+              </label>
+            </div>
+            <div id="border-color-group" style="${isInvisible ? 'opacity:0.5;pointer-events:none;' : ''}">
+              <div style="margin-bottom:8px;font-weight:500;">${currentLang === 'fr' ? 'Couleur des bordures' : 'Border color'}</div>
+              <input type="color" id="border-color" value="${currentColor}" style="width:100%;height:36px;border:1px solid #e2e8f0;border-radius:4px;cursor:pointer;">
+              <div style="margin-top:12px;font-weight:500;">${currentLang === 'fr' ? 'Type de filet' : 'Line style'}</div>
+              <select id="border-style" style="width:100%;padding:8px;border:1px solid #e2e8f0;border-radius:4px;">
+                <option value="solid" ${currentStyle === 'solid' ? 'selected' : ''}>${currentLang === 'fr' ? '━━━ Plein' : '━━━ Solid'}</option>
+                <option value="dashed" ${currentStyle === 'dashed' ? 'selected' : ''}>${currentLang === 'fr' ? '┅┅┅ Tirets' : '┅┅┅ Dashed'}</option>
+                <option value="dotted" ${currentStyle === 'dotted' ? 'selected' : ''}>${currentLang === 'fr' ? '┈┈┈ Pointillé' : '┈┈┈ Dotted'}</option>
+                <option value="double" ${currentStyle === 'double' ? 'selected' : ''}>${currentLang === 'fr' ? '═══ Double' : '═══ Double'}</option>
+                <option value="groove" ${currentStyle === 'groove' ? 'selected' : ''}>${currentLang === 'fr' ? '▤▤▤ Rainure' : '▤▤▤ Groove'}</option>
+                <option value="ridge" ${currentStyle === 'ridge' ? 'selected' : ''}>${currentLang === 'fr' ? '▥▥▥ Crête' : '▥▥▥ Ridge'}</option>
+              </select>
+              <div style="margin-top:12px;font-weight:500;">${currentLang === 'fr' ? 'Épaisseur' : 'Thickness'}</div>
+              <select id="border-width" style="width:100%;padding:8px;border:1px solid #e2e8f0;border-radius:4px;">
+                <option value="0.5px" ${currentWidth === '0.5px' ? 'selected' : ''}>0.5px - ${currentLang === 'fr' ? 'Très fin' : 'Hairline'}</option>
+                <option value="0.75px" ${currentWidth === '0.75px' ? 'selected' : ''}>0.75px</option>
+                <option value="1px" ${currentWidth === '1px' ? 'selected' : ''}>1px - ${currentLang === 'fr' ? 'Fin' : 'Thin'}</option>
+                <option value="2px" ${currentWidth === '2px' ? 'selected' : ''}>2px</option>
+                <option value="3px" ${currentWidth === '3px' ? 'selected' : ''}>3px - ${currentLang === 'fr' ? 'Moyen' : 'Medium'}</option>
+                <option value="4px" ${currentWidth === '4px' ? 'selected' : ''}>4px</option>
+                <option value="5px" ${currentWidth === '5px' ? 'selected' : ''}>5px - ${currentLang === 'fr' ? 'Épais' : 'Thick'}</option>
+                <option value="6px" ${currentWidth === '6px' ? 'selected' : ''}>6px</option>
+              </select>
+              <div style="margin-top:12px;padding:10px;background:#f8fafc;border-radius:6px;border:1px solid #e2e8f0;">
+                <div style="font-weight:500;margin-bottom:6px;font-size:0.9em;">${currentLang === 'fr' ? 'Aperçu' : 'Preview'}</div>
+                <div id="border-preview" style="width:100%;height:40px;background:white;border:2px solid #000;"></div>
+              </div>
+            </div>
+            <div style="display:flex;gap:10px;margin-top:15px;">
+              <button id="border-apply" style="flex:1;padding:10px;background:#3b82f6;color:white;border:none;border-radius:6px;cursor:pointer;">${currentLang === 'fr' ? 'Appliquer' : 'Apply'}</button>
+              <button id="border-cancel" style="flex:1;padding:10px;background:#f1f5f9;border:none;border-radius:6px;cursor:pointer;">${currentLang === 'fr' ? 'Annuler' : 'Cancel'}</button>
+            </div>
+          `;
+          
+          var overlay = document.createElement('div');
+          overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.3);z-index:9999;';
+          
+          document.body.appendChild(overlay);
+          document.body.appendChild(dialog);
+          
+          var invisibleCheck = dialog.querySelector('#border-invisible');
+          var colorGroup = dialog.querySelector('#border-color-group');
+          
+          invisibleCheck.addEventListener('change', function() {
+            colorGroup.style.opacity = this.checked ? '0.5' : '1';
+            colorGroup.style.pointerEvents = this.checked ? 'none' : 'auto';
+          });
+          
+          // Update preview on change
+          function updateTablePreview() {
+            var preview = dialog.querySelector('#border-preview');
+            if (preview) {
+              var c = dialog.querySelector('#border-color').value;
+              var w = dialog.querySelector('#border-width').value;
+              var s = dialog.querySelector('#border-style').value;
+              preview.style.border = w + ' ' + s + ' ' + c;
+            }
+          }
+          dialog.querySelector('#border-color').addEventListener('input', updateTablePreview);
+          dialog.querySelector('#border-width').addEventListener('change', updateTablePreview);
+          dialog.querySelector('#border-style').addEventListener('change', updateTablePreview);
+          updateTablePreview();
+          
+          dialog.querySelector('#border-apply').addEventListener('click', function() {
+            var invisible = invisibleCheck.checked;
+            var color = dialog.querySelector('#border-color').value;
+            var width = dialog.querySelector('#border-width').value;
+            var style = dialog.querySelector('#border-style').value;
+            
+            var borderValue = invisible ? 'none' : width + ' ' + style + ' ' + color;
+            
+            // Apply to table
+            table.style.border = borderValue;
+            table.style.borderCollapse = 'collapse';
+            
+            // Apply to all cells
+            var cells = table.querySelectorAll('td, th');
+            cells.forEach(function(cell) {
+              cell.style.border = borderValue;
+            });
+            
+            document.body.removeChild(dialog);
+            document.body.removeChild(overlay);
+          });
+          
+          dialog.querySelector('#border-cancel').addEventListener('click', function() {
+            document.body.removeChild(dialog);
+            document.body.removeChild(overlay);
+          });
+          
+          overlay.addEventListener('click', function() {
+            document.body.removeChild(dialog);
+            document.body.removeChild(overlay);
+          });
+        }
+      },
+      verticaltext: {
+        name: 'verticaltext',
+        iconURL: '',
+        tooltip: currentLang === 'fr' ? 'Texte vertical (cliquer pour changer le sens)' : 'Vertical text (click to change direction)',
+        exec: function(editor) {
+          var selection = editor.selection;
+          var current = selection.current();
+          if (current) {
+            // Find the closest cell (td or th)
+            var cell = current.closest ? current.closest('td, th') : null;
+            if (!cell) {
+              var el = current;
+              while (el && el.tagName !== 'TD' && el.tagName !== 'TH') {
+                el = el.parentElement;
+              }
+              cell = el;
+            }
+            if (cell) {
+              // Cycle through: normal -> vertical-rl (bottom to top) -> vertical-lr (top to bottom) -> normal
+              var currentMode = cell.style.writingMode;
+              if (currentMode === 'vertical-rl') {
+                // Switch to vertical-lr (top to bottom, text upright)
+                cell.style.writingMode = 'vertical-lr';
+                cell.style.textOrientation = 'mixed';
+                cell.style.transform = 'rotate(180deg)';
+                cell.style.whiteSpace = 'nowrap';
+              } else if (currentMode === 'vertical-lr') {
+                // Back to normal
+                cell.style.writingMode = '';
+                cell.style.textOrientation = '';
+                cell.style.transform = '';
+                cell.style.whiteSpace = '';
+              } else {
+                // Start with vertical-rl (bottom to top)
+                cell.style.writingMode = 'vertical-rl';
+                cell.style.textOrientation = 'mixed';
+                cell.style.transform = '';
+                cell.style.whiteSpace = 'nowrap';
+              }
+            } else {
+              // Not in a table cell, wrap selection in a span
+              var html = selection.html;
+              if (html) {
+                selection.insertHTML('<span style="writing-mode:vertical-rl;text-orientation:mixed;display:inline-block;">' + html + '</span>');
+              }
+            }
+          }
         }
       }
-      removeLoopEditButton();
-    }
-  }
-});
-
-// Store last cursor position before clicking outside editor
-var lastEditorRange = null;
-
-function restoreEditorSelection() {
-  if (!editorInstance || !lastEditorRange) return false;
-  try {
-    editorInstance.focus();
-    var sel = window.getSelection();
-    sel.removeAllRanges();
-    sel.addRange(lastEditorRange);
-    return true;
-  } catch (e) {
-    return false;
-  }
-}
-
-
-// Edit existing loop in a table
-function editTableLoop(tableElement) {
-  if (!editorInstance || !tableElement) return;
-
-  // Find the loop comment in the table
-  var tbody = tableElement.querySelector('tbody');
-  if (!tbody) return;
-
-  var loopComment = null;
-  var currentFilterCol = '';
-  var currentFilterVal = '';
-  var isViewLinked = false;
-  var isViewSelect = false;
-  var isLinkedTable = false;
-  var isMultiRef = false;
-  var currentViewId = '';
-  var currentLinkedTable = '';
-  var currentLinkedRefCol = '';
-  var currentFirstRefCol = '';
-  var currentSecondRefCol = '';
-
-  // Search for loop comment in tbody
-  for (var i = 0; i < tbody.childNodes.length; i++) {
-    var node = tbody.childNodes[i];
-    if (node.nodeType === 8) { // Comment node
-      if (node.textContent === 'LOOP:*') {
-        loopComment = node;
-        isViewLinked = true;
-        break;
-      }
-      var viewMatch = node.textContent.match(/^LOOP:VIEW:(\d+)\$/);
-      if (viewMatch) {
-        loopComment = node;
-        isViewSelect = true;
-        currentViewId = viewMatch[1];
-        break;
-      }
-      var tableMatch = node.textContent.match(/^LOOP:TABLE:([^:]+):(.+)$/);
-      if (tableMatch) {
-        loopComment = node;
-        isLinkedTable = true;
-        currentLinkedTable = tableMatch[1];
-        currentLinkedRefCol = tableMatch[2];
-        break;
-      }
-      var multiRefMatch = node.textContent.match(/^LOOP:MULTIREF:([^>]+)/);
-      if (multiRefMatch) {
-        loopComment = node;
-        isMultiRef = true;
-        var cols = multiRefMatch[1].split(':');
-        currentFirstRefCol = cols[0];
-        currentSecondRefCol = cols[1];
-        break;
-      }
-      var match = node.textContent.match(/^LOOP:([^=]+)=(.*)$/);
-      if (match) {
-        loopComment = node;
-        currentFilterCol = match[1];
-        currentFilterVal = match[2];
-        break;
+    },
+    buttons: [
+      'bold', 'italic', 'underline', 'strikethrough', '|',
+      'font', 'fontsize', '|',
+      'brush', '|',
+      'paragraph', '|',
+      'ul', 'ol', '|',
+      'outdent', 'indent', '|',
+      'align', 'verticaltext', '|',
+      'table', 'tablelayout', 'nestedtable', '|',
+      'tableborder', 'cellborder', 'columnwidth', '|',
+      'link', 'image', '|',
+      'hr', 'insertparagraph', 'pagebreak', '|',
+      'undo', 'redo', '|',
+      'eraser', 'source', 'fullsize', 'print'
+    ],
+    style: {
+      'font-family': '"Times New Roman", Times, serif',
+      'font-size': '14px',
+      'line-height': '1.6'
+    },
+    iframe: false,
+    showCharsCounter: false,
+    showWordsCounter: false,
+    showXPathInStatusbar: false,
+    events: {
+      change: function() {
+        scheduleAutoSave();
+      },
+      selectionchange: function() {
+        // Save cursor position whenever selection changes
+        saveEditorSelection();
+      },
+      blur: function() {
+        // Save cursor position when editor loses focus
+        saveEditorSelection();
+      },
+      click: function(e) {
+        // Save cursor position on click
+        saveEditorSelection();
+        // Check if clicked on a table with loop
+        var target = e.target;
+        var table = target.closest ? target.closest('table') : null;
+        if (!table) {
+          // Try parent elements
+          var el = target;
+          while (el && el.tagName !== 'TABLE') {
+            el = el.parentElement;
+          }
+          table = el;
+        }
+        
+        if (table) {
+          // Check if this table has a loop comment
+          var tbody = table.querySelector('tbody');
+          if (tbody) {
+            var hasLoop = false;
+            for (var i = 0; i < tbody.childNodes.length; i++) {
+              var node = tbody.childNodes[i];
+              if (node.nodeType === 8 && node.textContent.match(/^LOOP:/)) {
+                hasLoop = true;
+                break;
+              }
+            }
+            if (hasLoop) {
+              showLoopEditButton(table, e);
+              return;
+            }
+          }
+        }
+        removeLoopEditButton();
       }
     }
-  }
-
-  if (!loopComment) {
-    showToast(currentLang === 'fr' ? 'Aucune boucle trouvée dans ce tableau' : 'No loop found in this table', 'error');
-    return;
-  }
-
-  // For linked table loops, show full editing modal
-  if (isLinkedTable) {
-    // Build table selector options
-    var linkedTableOptions = '<option value="">' + (currentLang === 'fr' ? '-- Choisir une table --' : '-- Choose a table --') + '</option>';
-    for (var t = 0; t < allTables.length; t++) {
-      if (allTables[t] !== selectedTable) {
-        var selectedOpt = allTables[t] === currentLinkedTable ? 'selected' : '';
-        linkedTableOptions += '<option value="' + allTables[t] + '" ' + selectedOpt + '>' + allTables[t] + '</option>';
-      }
-    }
-
-    var linkedFormHtml = '<div style="text-align:left;">' +
-      '<div style="margin-bottom:15px;">' +
-      '<label style="display:block;margin-bottom:5px;font-weight:600;">' + (currentLang === 'fr' ? 'Table liée :' : 'Linked table:') + '</label>' +
-      '<select id="edit-linked-table" onchange="updateEditLinkedTableColumns()" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">' + linkedTableOptions + '</select>' +
-      '</div>' +
-      '<div style="margin-bottom:15px;">' +
-      '<label style="display:block;margin-bottom:5px;font-weight:600;">' + (currentLang === 'fr' ? 'Colonne de référence (vers ' + selectedTable + ') :' : 'Reference column (to ' + selectedTable + '):') + '</label>' +
-      '<select id="edit-linked-ref-col" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">' +
-      '<option value="' + currentLinkedRefCol + '" selected>' + currentLinkedRefCol + '</option>' +
-      '</select>' +
-      '</div>' +
-      '</div>';
-
-    // Show modal and handle confirmation
-    setTimeout(function() {
-      // Load columns for the current linked table
-      updateEditLinkedTableColumns();
-    }, 100);
-
-    showModal(currentLang === 'fr' ? '🔗 Modifier le tableau lié' : '🔗 Edit linked table', linkedFormHtml).then(function(confirmed) {
-      if (!confirmed) return;
-
-      var newLinkedTable = document.getElementById('edit-linked-table').value;
-      var newRefCol = document.getElementById('edit-linked-ref-col').value;
-
-      if (!newLinkedTable || !newRefCol) {
-        showToast(currentLang === 'fr' ? 'Veuillez sélectionner une table et une colonne de référence' : 'Please select a table and reference column', 'error');
-        return;
-      }
-
-      // Update the loop comment
-      loopComment.textContent = 'LOOP:TABLE:' + newLinkedTable + ':' + newRefCol;
-
-      // Update editor content
-      var updatedHtml = tableElement.outerHTML;
-
-      showToast(currentLang === 'fr' ? 'Boucle mise à jour' : 'Loop updated', 'success');
-    });
-    return;
-  }
-
-  // Build column selector options
-  var colOptions = '';
-  for (var i = 0; i < tableColumns.length; i++) {
-    var selected = tableColumns[i] === currentFilterCol ? 'selected' : '';
-    colOptions += '<option value="' + tableColumns[i] + '" ' + selected + '>' + tableColumns[i] + '</option>';
-  }
-
-  // Build view selector options
-  var viewOptions = '<option value="">' + (currentLang === 'fr' ? '-- Choisir une vue --' : '-- Choose a view --') + '</option>';
-  for (var v = 0; v < availableViews.length; v++) {
-    var viewName = availableViews[v].name;
-    var viewId = availableViews[v].id;
-    var hasFilters = availableViews[v].filters ? ' 🔍' : '';
-    var selectedView = String(viewId) === currentViewId ? 'selected' : '';
-    viewOptions += '<option value="' + viewId + '" ' + selectedView + '>' + viewName + hasFilters + '</option>';
-  }
-
-  // Build value options for current column
-  var uniqueVals = getUniqueValuesForColumn(currentFilterCol || tableColumns[0]);
-  var valOptions = '<option value="">' + (currentLang === 'fr' ? '-- Choisir une valeur --' : '-- Choose a value --') + '</option>';
-  for (var j = 0; j < uniqueVals.length; j++) {
-    var selVal = uniqueVals[j] === currentFilterVal ? 'selected' : '';
-    valOptions += '<option value="' + uniqueVals[j] + '" ' + selVal + '>' + uniqueVals[j] + '</option>';
-  }
-
-  // Determine which radio should be checked
-  var isFilterChecked = !isViewLinked && !isViewSelect && !isLinkedTable && !isMultiRef;
-
-  var formHtml = '<div style="text-align:left;">' +
-    '<div style="margin-bottom:15px;">' +
-    '<label style="display:block;margin-bottom:8px;font-weight:600;">' + (currentLang === 'fr' ? 'Type de tableau :' : 'Table type:') + '</label>' +
-    '<label style="display:block;margin-bottom:5px;cursor:pointer;">' +
-    '<input type="radio" name="edit-loop-type" value="view" ' + (isViewLinked ? 'checked' : '') + ' style="margin-right:8px;">' +
-    (currentLang === 'fr' ? 'Lié à la vue courante' : 'Linked to current view') + '</label>' +
-    '<label style="display:block;margin-bottom:5px;cursor:pointer;">' +
-    '<input type="radio" name="edit-loop-type" value="viewselect" ' + (isViewSelect ? 'checked' : '') + ' style="margin-right:8px;">' +
-    (currentLang === 'fr' ? 'Lié à une vue filtrée' : 'Linked to a filtered view') + '</label>' +
-    '<label style="display:block;margin-bottom:5px;cursor:pointer;">' +
-    '<input type="radio" name="edit-loop-type" value="linkedtable" ' + (isLinkedTable ? 'checked' : '') + ' style="margin-right:8px;">' +
-    (currentLang === 'fr' ? 'Lié à une table externe' : 'Linked to external table') + '</label>' +
-    '<label style="display:block;margin-bottom:5px;cursor:pointer;">' +
-    '<input type="radio" name="edit-loop-type" value="filter" ' + (isFilterChecked ? 'checked' : '') + ' style="margin-right:8px;">' +
-    (currentLang === 'fr' ? 'Avec filtre manuel' : 'With manual filter') + '</label>' +
-    '<label style="display:block;margin-bottom:5px;cursor:pointer;">' +
-    '<input type="radio" name="edit-loop-type" value="multiref" ' + (isMultiRef ? 'checked' : '') + ' style="margin-right:8px;">' +
-    (currentLang === 'fr' ? 'Colonnes de référence multiple' : 'Multiple reference columns') + '</label>' +
-    '</div>' +
-    '<div id="edit-view-select-options" style="' + (isViewSelect ? '' : 'display:none;') + 'border:1px solid #e5e7eb;padding:10px;border-radius:6px;margin-bottom:10px;background:#f0fdf4;">' +
-    '<label style="display:block;margin-bottom:5px;font-weight:600;">' + (currentLang === 'fr' ? 'Vue à utiliser :' : 'View to use:') + '</label>' +
-    '<select id="edit-loop-view-select" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">' + viewOptions + '</select>' +
-    '</div>' +
-    '<div id="edit-linked-table-options" style="' + (isLinkedTable ? '' : 'display:none;') + 'border:1px solid #e5e7eb;padding:10px;border-radius:6px;margin-bottom:10px;background:#fef3c7;">' +
-    '<div style="margin-bottom:10px;">' +
-    '<label style="display:block;margin-bottom:5px;font-weight:600;">' + (currentLang === 'fr' ? 'Table à afficher :' : 'Table to display:') + '</label>' +
-    '<select id="edit-linked-table" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">' + tableOptions + '</select>' +
-    '</div>' +
-    '<div style="margin-bottom:10px;">' +
-    '<label style="display:block;margin-bottom:5px;font-weight:600;">' + (currentLang === 'fr' ? 'Colonne de référence (vers ' + selectedTable + ') :' : 'Reference column (to ' + selectedTable + '):') + '</label>' +
-    '<select id="edit-linked-ref-col" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">' +
-    '<option value="' + currentLinkedRefCol + '" selected>' + currentLinkedRefCol + '</option>' +
-    '</select>' +
-    '</div>' +
-    '</div>' +
-    '<div id="edit-multiref-options" style="' + (isMultiRef ? '' : 'display:none;') + 'border:1px solid #e5e7eb;padding:10px;border-radius:6px;margin-bottom:10px;background:#e0f2fe;">' +
-    '<div style="margin-bottom:10px;">' +
-    '<label style="display:block;margin-bottom:5px;font-weight:600;">' + (currentLang === 'fr' ? 'Colonnes de référence multiple :' : 'Multiple reference columns:') + '</label>' +
-    '<div id="edit-multiref-cols-container" style="max-height:150px;overflow-y:auto;border:1px solid #eee;padding:8px;border-radius:4px;background:white;">';
-
-  // Add checkboxes for multiple reference columns
-  for (var j = 0; j < tableColumns.length; j++) {
-    var checked = (currentFirstRefCol === tableColumns[j] || currentSecondRefCol === tableColumns[j]) ? 'checked' : '';
-    formHtml += '<label style="display:block;margin-bottom:5px;cursor:pointer;">' +
-      '<input type="checkbox" name="edit-multiref-col" value="' + tableColumns[j] + '" ' + checked + ' style="margin-right:8px;">' +
-      tableColumns[j] + '</label>';
-  }
-
-  formHtml += '</div></div></div>' +
-    '<div id="edit-filter-options" style="' + (isFilterChecked ? '' : 'display:none;') + 'border:1px solid #e5e7eb;padding:10px;border-radius:6px;background:#f9fafb;">' +
-    '<div style="margin-bottom:10px;">' +
-    '<label style="display:block;margin-bottom:5px;font-weight:600;">' + (currentLang === 'fr' ? 'Colonne à filtrer :' : 'Column to filter:') + '</label>' +
-    '<select id="edit-loop-filter-col" onchange="updateEditLoopValueOptions()" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">' + colOptions + '</select>' +
-    '</div>' +
-    '<div style="margin-bottom:10px;">' +
-    '<label style="display:block;margin-bottom:5px;font-weight:600;">' + (currentLang === 'fr' ? 'Valeur à rechercher :' : 'Value to search:') + '</label>' +
-    '<select id="edit-loop-filter-val-select" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;margin-bottom:5px;">' + valOptions + '</select>' +
-    '<input type="text" id="edit-loop-filter-val" value="' + currentFilterVal + '" placeholder="' + (currentLang === 'fr' ? 'Ou saisir manuellement...' : 'Or type manually...') + '" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;box-sizing:border-box;">' +
-    '</div>' +
-    '</div>' +
-    '</div>';
-
-  // Show modal and handle confirmation
-  showModal(currentLang === 'fr' ? '✏️ Modifier la boucle' : '✏️ Edit loop', formHtml).then(function(confirmed) {
-    if (!confirmed) return;
-
-    var loopType = document.querySelector('input[name="edit-loop-type"]:checked');
-    var loopTypeValue = loopType ? loopType.value : 'view';
-
-    if (loopTypeValue === 'view') {
-      loopComment.textContent = 'LOOP:*';
-    } else if (loopTypeValue === 'viewselect') {
-      var viewSelect = document.getElementById('edit-loop-view-select');
-      var selectedViewId = viewSelect ? viewSelect.value : '';
-      if (selectedViewId) {
-        loopComment.textContent = 'LOOP:VIEW:' + selectedViewId;
-      } else {
-        loopComment.textContent = 'LOOP:*';
-      }
-    } else if (loopTypeValue === 'linkedtable') {
-      var linkedTableSelect = document.getElementById('edit-linked-table');
-      var linkedRefColSelect = document.getElementById('edit-linked-ref-col');
-      var newLinkedTable = linkedTableSelect ? linkedTableSelect.value : '';
-      var newRefCol = linkedRefColSelect ? linkedRefColSelect.value : '';
-      if (newLinkedTable && newRefCol) {
-        loopComment.textContent = 'LOOP:TABLE:' + newLinkedTable + ':' + newRefCol;
-      }
-    } else if (loopTypeValue === 'multiref') {
-      var multirefCols = [];
-      var multirefCheckboxes = document.querySelectorAll('input[name="edit-multiref-col"]:checked');
-      multirefCheckboxes.forEach(function(cb) { multirefCols.push(cb.value); });
-
-      if (multirefCols.length === 0) {
-        showToast(currentLang === 'fr' ? 'Veuillez sélectionner au moins une colonne de référence multiple.' : 'Please select at least one multiple reference column.', 'error');
-        return;
-      }
-
-      loopComment.textContent = 'LOOP:MULTIREF:' + multirefCols.join(':');
-    } else {
-      var newFilterCol = document.getElementById('edit-loop-filter-col').value;
-      var newFilterValSelect = document.getElementById('edit-loop-filter-val-select');
-      var newFilterValInput = document.getElementById('edit-loop-filter-val');
-      var newFilterVal = (newFilterValSelect && newFilterValSelect.value) || (newFilterValInput && newFilterValInput.value) || currentFilterVal;
-      loopComment.textContent = 'LOOP:' + newFilterCol + '=' + newFilterVal;
-    }
-
-    showToast(currentLang === 'fr' ? 'Boucle modifiée !' : 'Loop updated!', 'success');
-    scheduleAutoSave();
   });
-
-  // Add event listeners for radio buttons after modal opens
-  setTimeout(function() {
-    var radios = document.querySelectorAll('input[name="edit-loop-type"]');
-    radios.forEach(function(radio) {
-      radio.addEventListener('change', function() {
-        var filterOptions = document.getElementById('edit-filter-options');
-        var viewSelectOptions = document.getElementById('edit-view-select-options');
-        var linkedTableOptions = document.getElementById('edit-linked-table-options');
-        var multirefOptions = document.getElementById('edit-multiref-options');
-
-        if (filterOptions) {
-          filterOptions.style.display = this.value === 'filter' ? 'block' : 'none';
-        }
-        if (viewSelectOptions) {
-          viewSelectOptions.style.display = this.value === 'viewselect' ? 'block' : 'none';
-        }
-        if (linkedTableOptions) {
-          linkedTableOptions.style.display = this.value === 'linkedtable' ? 'block' : 'none';
-        }
-        if (multirefOptions) {
-          multirefOptions.style.display = this.value === 'multiref' ? 'block' : 'none';
-        }
-      });
-    });
-  }, 100);
+  
+  // Sticky toolbar disabled - causes issues with variables bar
+  // setTimeout(initStickyToolbar, 100);
 }
 
-// Remove loop edit button if exists
-function removeLoopEditButton() {
-  var existing = document.getElementById('loop-edit-btn');
-  if (existing) existing.remove();
-}
+// =============================================================================
+// PAGE FORMAT VISUAL
+// =============================================================================
 
-// Show loop edit button near a table
-function showLoopEditButton(tableElement, event) {
-  removeLoopEditButton();
-
-  var btn = document.createElement('button');
-  btn.id = 'loop-edit-btn';
-  btn.innerHTML = '✏️ ' + (currentLang === 'fr' ? 'Modifier la boucle' : 'Edit loop');
-  btn.style.cssText = 'position:absolute;z-index:9999;background:#8b5cf6;color:white;border:none;padding:6px 12px;border-radius:6px;font-size:12px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.2);';
-  btn.onclick = function(e) {
-    e.stopPropagation();
-    editTableLoop(tableElement);
-    removeLoopEditButton();
-  };
-
-  // Position near the click
-  var editorArea = document.querySelector('.jodit-wysiwyg');
-  if (editorArea) {
-    var rect = editorArea.getBoundingClientRect();
-    btn.style.left = (event.clientX - rect.left + editorArea.scrollLeft) + 'px';
-    btn.style.top = (event.clientY - rect.top + editorArea.scrollTop - 40) + 'px';
-    editorArea.style.position = 'relative';
-    editorArea.appendChild(btn);
-
-    // Auto-hide after 5 seconds
-    setTimeout(removeLoopEditButton, 5000);
+function setEditorPageFormat(format) {
+  var wrapper = document.getElementById('editor-page-wrapper');
+  if (!wrapper) return;
+  wrapper.className = '';
+  if (format === 'a4') {
+    wrapper.className = 'editor-page-a4';
+  } else if (format === 'letter') {
+    wrapper.className = 'editor-page-letter';
+  } else {
+    wrapper.className = 'editor-page-free';
   }
+  // Sync with PDF page size selector if it exists
+  var pdfPageSize = document.getElementById('pdf-page-size');
+  if (pdfPageSize && format !== 'free') {
+    pdfPageSize.value = format;
+  }
+}
+
+// =============================================================================
+// SAVE / LOAD TEMPLATE
+// =============================================================================
+
+function getEditorHtml() {
+  if (!editorInstance) return '';
+  return editorInstance.value;
+}
+
+function setEditorHtml(html) {
+  if (!editorInstance) return;
+  editorInstance.value = html;
+}
+
+// --- Multi-template management ---
+
+var currentTemplateName = '';
+
+async function getTemplateIndex() {
+  // Returns { templates: [ { name: "...", html: "..." }, ... ] }
+  try {
+    var idx = await grist.widgetApi.getOption('templateIndex');
+    console.log('getTemplateIndex from Grist:', idx);
+    if (idx && Array.isArray(idx.templates)) return idx;
+  } catch (e) {
+    console.warn('Error getting templateIndex from Grist:', e);
+  }
+  // Fallback to localStorage
+  try {
+    var local = localStorage.getItem(TEMPLATE_STORAGE_KEY + 'index');
+    console.log('getTemplateIndex from localStorage:', local);
+    if (local) {
+      var parsed = JSON.parse(local);
+      if (parsed && Array.isArray(parsed.templates)) return parsed;
+    }
+  } catch (e) {
+    console.warn('Error getting templateIndex from localStorage:', e);
+  }
+  console.log('getTemplateIndex: returning empty');
+  return { templates: [] };
+}
+
+async function saveTemplateIndex(index) {
+  console.log('Saving template index:', JSON.stringify(index));
+  try {
+    await grist.widgetApi.setOption('templateIndex', index);
+    console.log('Template index saved to Grist options');
+  } catch (e) {
+    console.warn('Could not save template index to Grist:', e);
+  }
+  try {
+    localStorage.setItem(TEMPLATE_STORAGE_KEY + 'index', JSON.stringify(index));
+    console.log('Template index saved to localStorage');
+  } catch (e) {
+    console.warn('Could not save to localStorage:', e);
+  }
+}
+
+async function refreshTemplateList() {
+  var select = document.getElementById('template-list');
+  var saveTargetSelect = document.getElementById('save-target-select');
+  if (!select) return;
+  var index = await getTemplateIndex();
+  select.innerHTML = '<option value="">' + t('templateSelectDefault') + '</option>';
+  
+  // Also update save target dropdown
+  if (saveTargetSelect) {
+    saveTargetSelect.innerHTML = '<option value="new">' + (currentLang === 'fr' ? '➕ Nouveau modèle' : '➕ New template') + '</option>';
+  }
+  
+  for (var i = 0; i < index.templates.length; i++) {
+    var opt = document.createElement('option');
+    opt.value = index.templates[i].name;
+    opt.textContent = index.templates[i].name;
+    if (index.templates[i].name === currentTemplateName) opt.selected = true;
+    select.appendChild(opt);
+    
+    // Add to save target dropdown too
+    if (saveTargetSelect) {
+      var saveOpt = document.createElement('option');
+      saveOpt.value = index.templates[i].name;
+      saveOpt.textContent = '📝 ' + index.templates[i].name;
+      saveTargetSelect.appendChild(saveOpt);
+    }
+  }
+  // Show/hide delete button
+  var delBtn = document.getElementById('btn-delete-template');
+  if (delBtn) delBtn.style.display = select.value ? '' : 'none';
+}
+
+function onTemplateSelectChange() {
+  var select = document.getElementById('template-list');
+  var nameInput = document.getElementById('template-name-input');
+  var delBtn = document.getElementById('btn-delete-template');
+  if (!select) return;
+  if (select.value) {
+    // Load selected template
+    loadTemplateByName(select.value);
+    if (nameInput) nameInput.value = select.value;
+    if (delBtn) delBtn.style.display = '';
+  } else {
+    // New template mode — clear editor
+    if (nameInput) nameInput.value = '';
+    currentTemplateName = '';
+    if (delBtn) delBtn.style.display = 'none';
+    if (editorInstance) {
+      editorInstance.value = '';
+      templateHtml = '';
+    }
+  }
+}
+
+async function loadTemplateByName(name) {
+  var index = await getTemplateIndex();
+  for (var i = 0; i < index.templates.length; i++) {
+    if (index.templates[i].name === name) {
+      setEditorHtml(index.templates[i].html);
+      templateHtml = index.templates[i].html;
+      currentTemplateName = name;
+      showToast(t('templateLoaded'), 'info');
+      return;
+    }
+  }
+}
+
+async function saveTemplate() {
+  if (!editorInstance) return;
+  templateHtml = getEditorHtml();
+  if (!selectedTable) return;
+
+  var nameInput = document.getElementById('template-name-input');
+  var saveTargetSelect = document.getElementById('save-target-select');
+  var saveTarget = saveTargetSelect ? saveTargetSelect.value : 'new';
+  
+  var name;
+  if (saveTarget === 'new') {
+    // Creating new template - use name input
+    name = (nameInput ? nameInput.value.trim() : '');
+    if (!name) {
+      // Prompt for name
+      name = prompt(t('templateName'), t('templateNamePlaceholder'));
+      if (!name || !name.trim()) return;
+      name = name.trim();
+    }
+  } else {
+    // Overwriting existing template
+    name = saveTarget;
+  }
+
+  var index = await getTemplateIndex();
+  // Update existing or add new
+  var found = false;
+  for (var i = 0; i < index.templates.length; i++) {
+    if (index.templates[i].name === name) {
+      index.templates[i].html = templateHtml;
+      found = true;
+      break;
+    }
+  }
+  if (!found) {
+    index.templates.push({ name: name, html: templateHtml });
+  }
+
+  await saveTemplateIndex(index);
+  currentTemplateName = name;
+  if (nameInput) nameInput.value = name;
+  await refreshTemplateList();
+  showToast(saveTarget === 'new' ? t('templateSaved') : (currentLang === 'fr' ? 'Modèle "' + name + '" mis à jour' : 'Template "' + name + '" updated'), 'success');
+}
+
+async function loadSavedTemplate() {
+  var index = await getTemplateIndex();
+
+  // Legacy migration: try old per-table templates and migrate to global index
+  if (index.templates.length === 0 && selectedTable) {
+    var legacyHtml = null;
+    try {
+      legacyHtml = await grist.widgetApi.getOption('template_' + selectedTable);
+    } catch (e) {}
+    if (!legacyHtml) {
+      try { legacyHtml = localStorage.getItem(TEMPLATE_STORAGE_KEY + selectedTable); } catch (e) {}
+    }
+    // Also try old per-table index format
+    if (!legacyHtml) {
+      try {
+        var oldIdx = await grist.widgetApi.getOption('templateIndex_' + selectedTable);
+        if (oldIdx && Array.isArray(oldIdx.templates) && oldIdx.templates.length > 0) {
+          // Migrate all old templates to global index
+          index.templates = oldIdx.templates;
+          await saveTemplateIndex(index);
+        }
+      } catch (e) {}
+    }
+    if (legacyHtml && editorInstance) {
+      // Migrate legacy single template
+      var legacyName = selectedTable + ' - ' + (currentLang === 'fr' ? 'Modèle importé' : 'Imported template');
+      index.templates.push({ name: legacyName, html: legacyHtml });
+      await saveTemplateIndex(index);
+    }
+  }
+
+  if (index.templates.length > 0) {
+    // Load the first template by default
+    var tpl = index.templates[0];
+    setEditorHtml(tpl.html);
+    templateHtml = tpl.html;
+    currentTemplateName = tpl.name;
+    var nameInput = document.getElementById('template-name-input');
+    if (nameInput) nameInput.value = tpl.name;
+    showToast(t('templateLoaded'), 'info');
+  }
+  await refreshTemplateList();
+}
+
+async function deleteSelectedTemplate() {
+  var select = document.getElementById('template-list');
+  if (!select || !select.value) return;
+  var name = select.value;
+  var confirmed = await showModal(t('confirmClearTitle'), t('templateDeleteConfirm').replace('{name}', name));
+  if (!confirmed) return;
+
+  var index = await getTemplateIndex();
+  index.templates = index.templates.filter(function(tpl) { return tpl.name !== name; });
+  await saveTemplateIndex(index);
+
+  currentTemplateName = '';
+  var nameInput = document.getElementById('template-name-input');
+  if (nameInput) nameInput.value = '';
+  editorInstance.value = '';
+  templateHtml = '';
+  await refreshTemplateList();
+  showToast(t('templateDeleted').replace('{name}', name), 'info');
+}
+
+async function clearEditor() {
+  var confirmed = await showModal(t('confirmClearTitle'), t('confirmClear'));
+  if (confirmed && editorInstance) {
+    editorInstance.value = '';
+    templateHtml = '';
+    currentTemplateName = '';
+    var nameInput = document.getElementById('template-name-input');
+    if (nameInput) nameInput.value = '';
+    var select = document.getElementById('template-list');
+    if (select) select.value = '';
+    var delBtn = document.getElementById('btn-delete-template');
+    if (delBtn) delBtn.style.display = 'none';
+    
+    // Clear saved draft too
+    try {
+      await grist.widgetApi.setOption('editorDraft', '');
+      console.log('Draft cleared');
+    } catch (e) {
+      console.warn('Could not clear draft:', e);
+    }
+    
+    showToast(t('templateCleared'), 'info');
+  }
+}
+
+// --- Refresh filters button ---
+
+async function refreshFilters() {
+  if (!selectedTable) {
+    showToast(currentLang === 'fr' ? 'Sélectionnez d\'abord une table' : 'Select a table first', 'error');
+    return;
+  }
+  
+  showToast(currentLang === 'fr' ? 'Actualisation des filtres...' : 'Refreshing filters...', 'info');
+  
+  // Reload table data
+  try {
+    var data = await grist.docApi.fetchTable(selectedTable);
+    tableData = data;
+    
+    // Reload views and filters
+    await loadViewsForTable(selectedTable);
+    
+    // Re-render preview
+    renderPreview();
+    
+    showToast(currentLang === 'fr' ? 'Filtres actualisés !' : 'Filters refreshed!', 'success');
+  } catch (error) {
+    console.error('Error refreshing filters:', error);
+    showToast(currentLang === 'fr' ? 'Erreur lors de l\'actualisation' : 'Error refreshing', 'error');
+  }
+}
+
+// --- PDF template selector ---
+
+async function refreshPdfTemplateList() {
+  var select = document.getElementById('pdf-template-select');
+  if (!select) return;
+  var index = await getTemplateIndex();
+  var editorLabel = currentLang === 'fr' ? '-- Modèle actuel de l\'éditeur --' : '-- Current editor template --';
+  select.innerHTML = '<option value="">' + editorLabel + '</option>';
+  for (var i = 0; i < index.templates.length; i++) {
+    var opt = document.createElement('option');
+    opt.value = index.templates[i].name;
+    opt.textContent = index.templates[i].name;
+    select.appendChild(opt);
+  }
+}
+
+async function onPdfTemplateChange() {
+  var select = document.getElementById('pdf-template-select');
+  if (!select || !select.value) return;
+  // Load selected template into templateHtml for PDF generation
+  var index = await getTemplateIndex();
+  for (var i = 0; i < index.templates.length; i++) {
+    if (index.templates[i].name === select.value) {
+      templateHtml = index.templates[i].html;
+      return;
+    }
+  }
+}
+
+// =============================================================================
+// IMPORT WORD (.docx)
+// =============================================================================
+
+// Drag & drop
+var dropZone = document.getElementById('drop-zone');
+if (dropZone) {
+  dropZone.addEventListener('dragover', function(e) {
+    e.preventDefault();
+    dropZone.classList.add('dragover');
+  });
+  dropZone.addEventListener('dragleave', function() {
+    dropZone.classList.remove('dragover');
+  });
+  dropZone.addEventListener('drop', function(e) {
+    e.preventDefault();
+    dropZone.classList.remove('dragover');
+    var files = e.dataTransfer.files;
+    if (files.length > 0 && files[0].name.endsWith('.docx')) {
+      importWord(files[0]);
+    }
+  });
+}
+
+function importWord(file) {
+  if (!file) return;
+  showToast(currentLang === 'fr' ? 'Import en cours...' : 'Importing...', 'info');
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var arrayBuffer = e.target.result;
+    var options = {
+      styleMap: [
+        "p[style-name='Title'] => h1:fresh",
+        "p[style-name='Titre'] => h1:fresh",
+        "p[style-name='Heading 1'] => h1:fresh",
+        "p[style-name='Titre 1'] => h1:fresh",
+        "p[style-name='Heading 2'] => h2:fresh",
+        "p[style-name='Titre 2'] => h2:fresh",
+        "p[style-name='Heading 3'] => h3:fresh",
+        "p[style-name='Titre 3'] => h3:fresh",
+        "p[style-name='Heading 4'] => h4:fresh",
+        "p[style-name='Titre 4'] => h4:fresh",
+        "p[style-name='List Paragraph'] => li:fresh",
+        "p[style-name='Paragraphe de liste'] => li:fresh",
+        "p[style-name='Quote'] => blockquote:fresh",
+        "p[style-name='Citation'] => blockquote:fresh",
+        "p[style-name='Intense Quote'] => blockquote:fresh",
+        "p[style-name='Subtitle'] => h2:fresh",
+        "p[style-name='Sous-titre'] => h2:fresh",
+        "r[style-name='Strong'] => strong",
+        "r[style-name='Emphasis'] => em",
+        "b => strong",
+        "i => em",
+        "u => u",
+        "strike => s"
+      ],
+      convertImage: mammoth.images.imgElement(function(image) {
+        return image.read('base64').then(function(imageBuffer) {
+          return {
+            src: 'data:' + image.contentType + ';base64,' + imageBuffer
+          };
+        });
+      }),
+      includeDefaultStyleMap: true
+    };
+    mammoth.convertToHtml({ arrayBuffer: arrayBuffer }, options).then(function(result) {
+      var html = result.value;
+      if (result.messages.length > 0) {
+        console.log('Mammoth messages:', result.messages);
+      }
+      // Post-process HTML for better layout
+      html = postProcessWordHtml(html);
+      if (editorInstance) {
+        setEditorHtml(html);
+        templateHtml = html;
+      }
+      var warnings = result.messages.filter(function(m) { return m.type === 'warning'; });
+      if (warnings.length > 0) {
+        showToast(t('importSuccess') + ' (' + warnings.length + ' avertissements)', 'warning');
+      } else {
+        showToast(t('importSuccess'), 'success');
+      }
+    }).catch(function(error) {
+      console.error('Word import error:', error);
+      showToast(t('importError') + error.message, 'error');
+    });
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function postProcessWordHtml(html) {
+  // Add max-width to images so they fit in the editor
+  html = html.replace(/<img /g, '<img style="max-width:100%;height:auto;" ');
+
+  // Convert page breaks (Mammoth doesn't handle them well)
+  // Some Word docs use <br/> for page breaks - we add a visual separator
+  html = html.replace(/<br\s*\/?>\s*<br\s*\/?>\s*<br\s*\/?>/g,
+    '<hr style="border:none;border-top:2px dashed #cbd5e1;margin:30px 0;page-break-after:always;">');
+
+  // Ensure empty paragraphs have some height (Word uses them for spacing)
+  html = html.replace(/<p><\/p>/g, '<p style="min-height:1em;">&nbsp;</p>');
+
+  // Add some spacing to paragraphs
+  html = html.replace(/<p>/g, '<p style="margin-bottom:8px;">');
+
+  // Style tables - no visible borders, just padding for layout
+  html = html.replace(/<table>/g, '<table style="border-collapse:collapse;width:100%;margin:10px 0;border:none;">');
+  html = html.replace(/<td>/g, '<td style="border:none;padding:6px 10px;vertical-align:top;">');
+  html = html.replace(/<td /g, '<td style="border:none;padding:6px 10px;vertical-align:top;" ');
+  html = html.replace(/<th>/g, '<th style="border:none;padding:6px 10px;font-weight:bold;vertical-align:top;">');
+  html = html.replace(/<th /g, '<th style="border:none;padding:6px 10px;font-weight:bold;vertical-align:top;" ');
+
+  return html;
+}
+
+// =============================================================================
+// PREVIEW (MAIL MERGE)
+// =============================================================================
+
+function getRecordCount() {
+  if (!tableData || !tableColumns.length) return 0;
+  var firstCol = tableColumns[0];
+  return (tableData[firstCol] || []).length;
+}
+
+function getRecordAt(index) {
+  if (!tableData || index < 0) return {};
+  var record = {};
+  for (var i = 0; i < tableColumns.length; i++) {
+    var col = tableColumns[i];
+    var arr = tableData[col] || [];
+    record[col] = (index < arr.length) ? arr[index] : '';
+  }
+  return record;
 }
 
 // =============================================================================
 // LOOP PROCESSING - {{#each Column=Value}}...{{/each}}
 // =============================================================================
 
-function executeLoopForMultiRef(multirefCols, loopContent, forPdf) {
-  if (!tableData || !multirefCols) {
-    return '<span style="color:red;">[' + (currentLang === 'fr' ? 'Colonnes non trouvées' : 'Columns not found') + ']</span>';
-  }
-
-  var multirefColsArray = multirefCols.split(':');
-  var output = '';
-
-  // Vérifier que toutes les colonnes sélectionnées existent dans tableData
-  for (var i = 0; i < multirefColsArray.length; i++) {
-    var colName = multirefColsArray[i];
-    if (!tableData[colName]) {
-      return '<span style="color:red;">[' + (currentLang === 'fr' ? 'Colonne non trouvée: ' + colName : 'Column not found: ' + colName) + ']</span>';
-    }
-  }
-
-  // Générer toutes les combinaisons possibles des références multiples
-  var combinations = generateCombinations(multirefColsArray);
-
-  for (var i = 0; i < combinations.length; i++) {
-    var rowRecord = getRecordAt(currentRecordIndex);
-
-    for (var j = 0; j < multirefColsArray.length; j++) {
-      var colName = multirefColsArray[j];
-      var refTable = getRefTableName(colName);
-      var refValue = combinations[i][j];
-      if (refValue && refTable) {
-        rowRecord[colName] = lookupRefValue(referenceTables[refTable], refValue, 'Nom');
-      }
-    }
-
-    // Résoudre les variables dans loopContent pour cette ligne
-    var rowHtml = loopContent;
-    for (var col in rowRecord) {
-      var val = rowRecord[col];
-      var display = formatValueForDisplay(val);
-
-      // Remplacer les variables
-      var styledRegex = new RegExp('<span[^>]*>\\{\\{' + escapeRegex(col) + '\\}\\}</span>', 'g');
-      if (display) {
-        if (forPdf) {
-          rowHtml = rowHtml.replace(styledRegex, sanitize(display));
-        } else {
-          rowHtml = rowHtml.replace(styledRegex, '<span class="var-resolved">' + sanitize(display) + '</span>');
-        }
-      } else {
-        rowHtml = rowHtml.replace(styledRegex, '');
-      }
-
-      var plainRegex = new RegExp('\\{\\{' + escapeRegex(col) + '\\}\\}', 'g');
-      if (display) {
-        if (forPdf) {
-          rowHtml = rowHtml.replace(plainRegex, sanitize(display));
-        } else {
-          rowHtml = rowHtml.replace(plainRegex, '<span class="var-resolved">' + sanitize(display) + '</span>');
-        }
-      } else {
-        rowHtml = rowHtml.replace(plainRegex, '');
-      }
-    }
-
-    // Résoudre les images pour cette ligne
-    rowHtml = resolveImagesInHtml(rowHtml, rowRecord, forPdf);
-    output += rowHtml;
-  }
-
-  return output;
+// Sync bool format between preview and PDF selectors
+function syncBoolFormat(value) {
+  var pdfSelect = document.getElementById('bool-format');
+  var previewSelect = document.getElementById('bool-format-preview');
+  if (pdfSelect) pdfSelect.value = value;
+  if (previewSelect) previewSelect.value = value;
 }
 
-// Fonction utilitaire pour générer toutes les combinaisons possibles des références multiples
-function generateCombinations(multirefCols) {
-  var combinations = [[]];
-
-  for (var i = 0; i < multirefCols.length; i++) {
-    var colName = multirefCols[i];
-    var refValues = tableData[colName][currentRecordIndex] || [];
-
-    if (!Array.isArray(refValues)) {
-      refValues = [refValues];
+// Resolve {{IMG:column}} or {{IMG:column:width}} in HTML for a specific record
+function resolveImagesInHtml(html, record, forPdf) {
+  // First, remove the green styling spans around {{IMG:...}}
+  html = html.replace(/<span[^>]*style="[^"]*background:#dcfce7[^"]*"[^>]*>(\{\{IMG:[^}]+\}\})<\/span>/g, '$1');
+  
+  var imgRegex = /\{\{IMG:([^:}]+)(?::(\d+))?\}\}/g;
+  return html.replace(imgRegex, function(match, colName, width) {
+    var imgValue = record[colName];
+    if (!imgValue) {
+      return forPdf ? '' : '<span class="var-empty">[IMG: ' + colName + ' vide]</span>';
     }
+    
+    var imgUrl = resolveImageUrl(imgValue);
+    if (!imgUrl) {
+      return forPdf ? '' : '<span class="var-empty">[IMG: format non supporté]</span>';
+    }
+    
+    var imgWidth = width ? width + 'px' : 'auto';
+    var imgStyle = 'max-width:100%;height:auto;' + (width ? 'width:' + imgWidth + ';' : '');
+    return '<img src="' + imgUrl + '" style="' + imgStyle + '" alt="' + colName + '">';
+  });
+}
 
-    // Si refValues n'est pas un tableau, le transformer en tableau avec un seul élément
-    if (!Array.isArray(refValues)) {
-      refValues = refValues ? [refValues] : [];
-    }
-
-    var temp = [];
-    for (var j = 0; j < combinations.length; j++) {
-      for (var k = 0; k < refValues.length; k++) {
-        var newCombination = combinations[j].slice();
-        newCombination.push(refValues[k]);
-        temp.push(newCombination);
-      }
-    }
-    // Si aucune valeur n'est présente, ajouter une combinaison vide
-    if (refValues.length === 0) {
-      for (var j = 0; j < combinations.length; j++) {
-        var newCombination = combinations[j].slice();
-        newCombination.push(null);
-        temp.push(newCombination);
-      }
-    }
-    combinations = temp;
+// Resolve image URL from various formats
+function resolveImageUrl(value) {
+  if (!value) return null;
+  
+  var str = String(value).trim();
+  
+  // 1. Already a web URL (http:// or https://)
+  if (str.startsWith('http://') || str.startsWith('https://')) {
+    return str;
   }
+  
+  // 2. Grist Attachment format - array of attachment objects [{id: 123, ...}]
+  if (Array.isArray(value) && value.length > 0 && value[0].id) {
+    // Build Grist attachment URL
+    var attachmentId = value[0].id;
+    if (gristServerUrl && gristDocId) {
+      return gristServerUrl + '/api/docs/' + gristDocId + '/attachments/' + attachmentId + '/download';
+    }
+    return null;
+  }
+  
+  // 3. Grist Attachment ID (just a number)
+  if (/^\d+$/.test(str)) {
+    if (gristServerUrl && gristDocId) {
+      return gristServerUrl + '/api/docs/' + gristDocId + '/attachments/' + str + '/download';
+    }
+    return null;
+  }
+  
+  // 4. Data URL (base64 encoded image)
+  if (str.startsWith('data:image/')) {
+    return str;
+  }
+  
+  // 5. Relative path with configured base URL
+  var imageBaseUrl = document.getElementById('image-base-url')?.value;
+  if (imageBaseUrl) {
+    // Remove trailing slash from base URL
+    imageBaseUrl = imageBaseUrl.replace(/\/+$/, '');
+    // Remove leading slash from path
+    var path = str.replace(/^\/+/, '');
+    return imageBaseUrl + '/' + path;
+  }
+  
+  // 6. Try as-is (might be a relative URL that works)
+  return str;
+}
 
-  return combinations;
+function formatValueForDisplay(value) {
+  if (value === null || value === undefined || value === '') return '';
+  
+  // Handle booleans - convert to readable format or checkbox
+  // Check both selectors (preview and PDF tab)
+  var boolFormatSelect = document.getElementById('bool-format') || document.getElementById('bool-format-preview');
+  var useCheckbox = boolFormatSelect && boolFormatSelect.value === 'checkbox';
+  
+  if (value === true || value === 'true') {
+    return useCheckbox ? '☑' : (currentLang === 'fr' ? 'Oui' : 'Yes');
+  }
+  if (value === false || value === 'false') {
+    return useCheckbox ? '☐' : (currentLang === 'fr' ? 'Non' : 'No');
+  }
+  
+  var str = String(value);
+  
+  // Check if it's a Grist timestamp (number of seconds since epoch, typically 10+ digits)
+  if (/^\d{10,}$/.test(str)) {
+    var timestamp = parseInt(str);
+    var date = new Date(timestamp * 1000);
+    if (!isNaN(date.getTime())) {
+      var day = String(date.getDate()).padStart(2, '0');
+      var month = String(date.getMonth() + 1).padStart(2, '0');
+      var year = date.getFullYear();
+      return day + '/' + month + '/' + year;
+    }
+  }
+  
+  // Check if it's an ISO date format (YYYY-MM-DD) and convert to French format (DD/MM/YYYY)
+  var isoDateMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoDateMatch) {
+    var year = isoDateMatch[1];
+    var month = isoDateMatch[2];
+    var day = isoDateMatch[3];
+    return day + '/' + month + '/' + year;
+  }
+  
+  return str;
+}
+
+function normalizeForComparison(value) {
+  if (!value) return '';
+  var str = String(value).trim().toLowerCase();
+  
+  // Handle Grist timestamp (number of seconds since epoch)
+  if (/^\d{10,}$/.test(str)) {
+    var date = new Date(parseInt(str) * 1000);
+    if (!isNaN(date.getTime())) {
+      // Return multiple formats for matching
+      var day = String(date.getDate()).padStart(2, '0');
+      var month = String(date.getMonth() + 1).padStart(2, '0');
+      var year = date.getFullYear();
+      var shortYear = String(year).slice(-2);
+      return day + '/' + month + '/' + year + '|' + day + '/' + month + '/' + shortYear + '|' + year + '-' + month + '-' + day;
+    }
+  }
+  
+  // Handle ISO date format (2026-02-16)
+  var isoMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) {
+    var y = isoMatch[1], m = isoMatch[2], d = isoMatch[3];
+    return d + '/' + m + '/' + y + '|' + d + '/' + m + '/' + y.slice(-2) + '|' + y + '-' + m + '-' + d;
+  }
+  
+  // Handle French date format (16/02/2026 or 16/02/26)
+  var frMatch = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+  if (frMatch) {
+    var dd = frMatch[1].padStart(2, '0');
+    var mm = frMatch[2].padStart(2, '0');
+    var yy = frMatch[3];
+    if (yy.length === 2) {
+      yy = (parseInt(yy) > 50 ? '19' : '20') + yy;
+    }
+    return dd + '/' + mm + '/' + yy + '|' + dd + '/' + mm + '/' + yy.slice(-2) + '|' + yy + '-' + mm + '-' + dd;
+  }
+  
+  return str;
 }
 
 function processLoops(html, forPdf) {
   if (!tableData || !tableColumns.length) return html;
-
+  
   var resolved = html;
-
-  // Traitement des boucles imbriquées pour plusieurs colonnes de référence multiple
-  var multiRefLoopRegex = /<!--LOOP:MULTIREF:([^>]+)-->([\s\S]*?)<!--\/LOOP-->/gi;
-  resolved = resolved.replace(multiRefLoopRegex, function(match, multirefCols, loopContent) {
-    return executeLoopForMultiRef(multirefCols, loopContent, forPdf);
-  });
-
+  
   // Process HTML comment-based loops (for tables): <!--LOOP:Column=Value-->...<!--/LOOP-->
   // Also supports <!--LOOP:*--> for view-linked tables (all rows)
   // Also supports <!--LOOP:VIEW:viewId--> for specific view filters
@@ -2887,69 +2930,69 @@ function processLoops(html, forPdf) {
   var commentLoopRegex = /<!--LOOP:(\*|VIEW:\d+|TABLE:[^:]+:[^-]+|[^=]+=[^-]+)-->([\s\S]*?)<!--\/LOOP-->/gi;
   resolved = resolved.replace(commentLoopRegex, function(match, loopSpec, loopContent) {
     if (loopSpec === '*') {
-      // View-linked table: uses <!--LOOP:*--> to show all rows from the current view
+      // View-linked: show all rows from current view
       return executeLoopAllRows(loopContent, forPdf);
     } else if (loopSpec.startsWith('VIEW:')) {
-      // View-select table: uses <!--LOOP:VIEW:viewId--> to show rows from selected view
+      // View-select: show rows filtered by specific view
       var viewId = loopSpec.substring(5);
       return executeLoopFromView(viewId, loopContent, forPdf);
     } else if (loopSpec.startsWith('TABLE:')) {
-      // Linked table: uses <!--LOOP:TABLE:tableName:refColumn--> to show rows from linked table
+      // Linked table: TABLE:tableName:refColumn
       var tableParts = loopSpec.substring(6).split(':');
       var linkedTableName = tableParts[0].trim();
       var refColumn = tableParts[1].trim();
       return executeLoopLinkedTable(linkedTableName, refColumn, loopContent, forPdf);
     } else {
-      // Filtered table
+      // Filtered: parse Column=Value
       var parts = loopSpec.split('=');
       var filterCol = parts[0].trim();
       var filterVal = parts.slice(1).join('=').trim(); // Handle values with = in them
       return executeLoop(filterCol, filterVal, loopContent, forPdf);
     }
   });
-
+  
   // Special case: handle loops inside table rows
   // Pattern: <tr>...<td>{{#each...}}</td>...</tr>...<tr>...</tr>...<tr>...<td>{{/each}}</td>...</tr>
   // This happens when Jodit puts the loop markers in table cells
   var tableLoopRegex = /<tr[^>]*>([^]*?)<td[^>]*>([^<]*\{\{#each\s+([^=}]+)=([^}]+)\}\}[^<]*)<\/td>([^]*?)<\/tr>([^]*?)<tr[^>]*>([^]*?)<\/tr>([^]*?)<tr[^>]*>([^]*?)<td[^>]*>([^<]*\{\{\/each\}\}[^<]*)<\/td>([^]*?)<\/tr>/gi;
-
+  
   resolved = resolved.replace(tableLoopRegex, function(match, before1, eachCell, filterCol, filterVal, after1, between, rowContent, after2, before3, endCell, after3) {
     // Extract the template row (the middle <tr>)
     var templateRow = '<tr>' + rowContent + '</tr>';
     var result = executeLoop(filterCol.trim(), filterVal.trim(), templateRow, forPdf);
     return result;
   });
-
+  
   // Simpler table loop: <tr> containing {{#each}} ... next <tr> with content ... <tr> with {{/each}}
   // Try to detect: row with #each, then row(s) with variables, then row with /each
   var simpleTableLoopRegex = /<tr[^>]*>\s*<td[^>]*>\s*\{\{#each\s+([^=}]+)=([^}]+)\}\}\s*<\/td>\s*<\/tr>\s*(<tr[^>]*>[\s\S]*?<\/tr>)\s*<tr[^>]*>\s*<td[^>]*>\s*\{\{\/each\}\}\s*<\/td>\s*<\/tr>/gi;
-
+  
   resolved = resolved.replace(simpleTableLoopRegex, function(match, filterCol, filterVal, templateRows) {
     return executeLoop(filterCol.trim(), filterVal.trim(), templateRows, forPdf);
   });
-
+  
   // Regex to match {{#each Column=Value}}...{{/each}}
   // Supports both plain text and styled spans
   var loopRegex = /\{\{#each\s+([^=}]+)=([^}]+)\}\}([\s\S]*?)\{\{\/each\}\}/g;
   var styledLoopRegex = /<span[^>]*>\{\{#each\s+([^=}]+)=([^}]+)\}\}<\/span>([\s\S]*?)<span[^>]*>\{\{\/each\}\}<\/span>/g;
-
+  
   // Process styled loops first
   resolved = resolved.replace(styledLoopRegex, function(match, filterCol, filterVal, loopContent) {
     return executeLoop(filterCol.trim(), filterVal.trim(), loopContent, forPdf);
   });
-
+  
   // Process plain text loops
   resolved = resolved.replace(loopRegex, function(match, filterCol, filterVal, loopContent) {
     return executeLoop(filterCol.trim(), filterVal.trim(), loopContent, forPdf);
   });
-
+  
   return resolved;
 }
 
 function executeLoopFromView(viewId, loopContent, forPdf) {
   // Execute loop using filters from a specific view
   if (!tableData || !tableColumns.length) return '';
-
+  
   // Find the view in availableViews
   var viewInfo = null;
   for (var i = 0; i < availableViews.length; i++) {
@@ -2958,11 +3001,11 @@ function executeLoopFromView(viewId, loopContent, forPdf) {
       break;
     }
   }
-
+  
   if (!viewInfo) {
     return '<span style="color:red;">[' + (currentLang === 'fr' ? 'Vue non trouvée: ' : 'View not found: ') + viewId + ']</span>';
   }
-
+  
   // Parse filters from the view
   // viewInfo.filters is now an array of {colRef, filter} objects from _grist_Filters
   var filters = [];
@@ -2972,7 +3015,7 @@ function executeLoopFromView(viewId, loopContent, forPdf) {
         var filterDef = viewInfo.filters[f];
         var colRef = filterDef.colRef;
         var filterJson = filterDef.filter;
-
+        
         // Resolve column name from colRef
         var colName = columnIdToName[colRef];
         if (colName && filterJson) {
@@ -2997,30 +3040,30 @@ function executeLoopFromView(viewId, loopContent, forPdf) {
       console.error('Error parsing view filters:', e);
     }
   }
-
+  
   console.log('Executing loop from view', viewInfo.name, 'with filters:', filters);
-
+  
   // Get the number of rows
   var firstCol = tableColumns[0];
   var rowCount = tableData[firstCol] ? tableData[firstCol].length : 0;
-
+  
   if (rowCount === 0) {
     return '<span style="color:#f59e0b;font-style:italic;">[' + (currentLang === 'fr' ? 'Aucune ligne' : 'No rows') + ']</span>';
   }
-
+  
   // Generate output for each row that matches the filters
   var output = '';
   var matchCount = 0;
-
+  
   for (var j = 0; j < rowCount; j++) {
     var rowRecord = getRecordAt(j);
-
+    
     // Check if row matches all filters
     var matches = true;
     for (var fi = 0; fi < filters.length; fi++) {
       var filter = filters[fi];
       var rowVal = rowRecord[filter.column];
-
+      
       // Check if row value matches the filter
       var found = false;
       for (var vi = 0; vi < filter.values.length; vi++) {
@@ -3030,7 +3073,7 @@ function executeLoopFromView(viewId, loopContent, forPdf) {
           break;
         }
       }
-
+      
       if (filter.type === 'included') {
         // For included filters, row must have one of the values
         if (!found) {
@@ -3045,16 +3088,16 @@ function executeLoopFromView(viewId, loopContent, forPdf) {
         }
       }
     }
-
+    
     if (!matches) continue;
     matchCount++;
-
+    
     // Resolve variables in loopContent for this row
     var rowHtml = loopContent;
     for (var col in rowRecord) {
       var val = rowRecord[col];
       var display = formatValueForDisplay(val);
-
+      
       // Replace styled spans
       var styledRegex = new RegExp('<span[^>]*>\\{\\{' + escapeRegex(col) + '\\}\\}</span>', 'g');
       if (display) {
@@ -3066,7 +3109,7 @@ function executeLoopFromView(viewId, loopContent, forPdf) {
       } else {
         rowHtml = rowHtml.replace(styledRegex, '');
       }
-
+      
       // Replace plain text variables
       var plainRegex = new RegExp('\\{\\{' + escapeRegex(col) + '\\}\\}', 'g');
       if (display) {
@@ -3083,11 +3126,11 @@ function executeLoopFromView(viewId, loopContent, forPdf) {
     rowHtml = resolveImagesInHtml(rowHtml, rowRecord, forPdf);
     output += rowHtml;
   }
-
+  
   if (matchCount === 0) {
     return '<span style="color:#f59e0b;font-style:italic;">[' + (currentLang === 'fr' ? 'Aucune ligne correspondante dans la vue ' : 'No matching rows in view ') + viewInfo.name + ']</span>';
   }
-
+  
   return output;
 }
 
@@ -3097,9 +3140,9 @@ var linkedTableCache = {};
 async function executeLoopLinkedTableAsync(linkedTableName, refColumn, loopContent, forPdf, currentRecordId) {
   // Execute loop for rows from a linked table, filtered by reference to current record
   // Example: Facture_details where Facture_Ref = currentRecordId
-
+  
   var output = '';
-
+  
   try {
     // Fetch linked table data (use cache if available)
     var linkedData;
@@ -3109,52 +3152,52 @@ async function executeLoopLinkedTableAsync(linkedTableName, refColumn, loopConte
       linkedData = await grist.docApi.fetchTable(linkedTableName);
       linkedTableCache[linkedTableName] = linkedData;
     }
-
+    
     if (!linkedData || !linkedData.id) {
       return '<span style="color:#ef4444;font-style:italic;">[' + (currentLang === 'fr' ? 'Table non trouvée: ' : 'Table not found: ') + linkedTableName + ']</span>';
     }
-
+    
     // Check if refColumn exists
     if (!linkedData[refColumn]) {
       return '<span style="color:#ef4444;font-style:italic;">[' + (currentLang === 'fr' ? 'Colonne de référence non trouvée: ' : 'Reference column not found: ') + refColumn + ']</span>';
     }
-
+    
     var rowCount = linkedData.id.length;
     var matchCount = 0;
-
+    
     // Get columns from linked table
     var linkedColumns = Object.keys(linkedData).filter(function(k) {
       return k !== 'id' && k !== 'manualSort' && !k.startsWith('gristHelper_');
     });
-
+    
     for (var i = 0; i < rowCount; i++) {
       // Check if this row references the current record
       var refValue = linkedData[refColumn][i];
-
+      
       // Handle both direct ID and reference object
       var refId = refValue;
       if (typeof refValue === 'object' && refValue !== null) {
         refId = refValue.id || refValue;
       }
-
+      
       if (refId !== currentRecordId) continue;
-
+      
       matchCount++;
-
+      
       // Build row record
       var rowRecord = { id: linkedData.id[i] };
       for (var c = 0; c < linkedColumns.length; c++) {
         var col = linkedColumns[c];
         rowRecord[col] = linkedData[col][i];
       }
-
+      
       // Resolve variables in loopContent for this row
       var rowHtml = loopContent;
       for (var col in rowRecord) {
         if (col === 'id') continue;
         var val = rowRecord[col];
         var display = formatValueForDisplay(val);
-
+        
         // Replace styled spans
         var styledRegex = new RegExp('<span[^>]*>\\{\\{' + escapeRegex(col) + '\\}\\}</span>', 'g');
         if (display) {
@@ -3166,7 +3209,7 @@ async function executeLoopLinkedTableAsync(linkedTableName, refColumn, loopConte
         } else {
           rowHtml = rowHtml.replace(styledRegex, '');
         }
-
+        
         // Replace plain text variables
         var plainRegex = new RegExp('\\{\\{' + escapeRegex(col) + '\\}\\}', 'g');
         if (display) {
@@ -3183,11 +3226,11 @@ async function executeLoopLinkedTableAsync(linkedTableName, refColumn, loopConte
       rowHtml = resolveImagesInHtml(rowHtml, rowRecord, forPdf);
       output += rowHtml;
     }
-
+    
     if (matchCount === 0) {
       return '<span style="color:#f59e0b;font-style:italic;">[' + (currentLang === 'fr' ? 'Aucune ligne liée dans ' : 'No linked rows in ') + linkedTableName + ']</span>';
     }
-
+    
     return output;
   } catch (error) {
     console.error('Error in executeLoopLinkedTableAsync:', error);
@@ -3202,12 +3245,12 @@ function executeLoopLinkedTable(linkedTableName, refColumn, loopContent, forPdf)
   if (!tableData || !tableData.id || tableData.id.length === 0) {
     return '<span style="color:#ef4444;font-style:italic;">[' + (currentLang === 'fr' ? 'Pas d\'enregistrement courant' : 'No current record') + ']</span>';
   }
-
+  
   var currentRecordId = tableData.id[currentRecordIndex];
-
+  
   // Create a unique placeholder
   var placeholderId = 'linked-table-' + linkedTableName + '-' + refColumn + '-' + currentRecordId + '-' + Date.now();
-
+  
   // Execute async and update DOM when ready
   executeLoopLinkedTableAsync(linkedTableName, refColumn, loopContent, forPdf, currentRecordId).then(function(result) {
     var placeholder = document.getElementById(placeholderId);
@@ -3230,7 +3273,7 @@ function executeLoopLinkedTable(linkedTableName, refColumn, loopContent, forPdf)
       }
     }
   });
-
+  
   // Return a placeholder row instead of a span
   return '<tr id="' + placeholderId + '"><td colspan="99" style="color:#6b7280;font-style:italic;text-align:center;">' + (currentLang === 'fr' ? 'Chargement...' : 'Loading...') + '</td></tr>';
 }
@@ -3238,19 +3281,13 @@ function executeLoopLinkedTable(linkedTableName, refColumn, loopContent, forPdf)
 // Async version of processLoops for PDF generation - waits for linked table data
 async function processLoopsAsync(html, forPdf) {
   if (!tableData || !tableColumns.length) return html;
-
+  
   var resolved = html;
-
-  // Traitement des boucles imbriquées pour plusieurs colonnes de référence multiple
-  var multiRefLoopRegex = /<!--LOOP:MULTIREF:([^>]+)-->([\s\S]*?)<!--\/LOOP-->/gi;
-  resolved = resolved.replace(multiRefLoopRegex, function(match, multirefCols, loopContent) {
-    return executeLoopForMultiRef(multirefCols, loopContent, forPdf);
-  });
-
+  
   // Process HTML comment-based loops (for tables): <!--LOOP:Column=Value-->...<!--/LOOP-->
   // Handle TABLE: loops specially - they need async processing
   var commentLoopRegex = /<!--LOOP:(\*|VIEW:\d+|TABLE:[^:]+:[^-]+|[^=]+=[^-]+)-->([\s\S]*?)<!--\/LOOP-->/gi;
-
+  
   // Collect all matches first
   var matches = [];
   var match;
@@ -3264,12 +3301,12 @@ async function processLoopsAsync(html, forPdf) {
       index: match.index
     });
   }
-
+  
   // Process matches in reverse order to preserve indices
   for (var i = matches.length - 1; i >= 0; i--) {
     var m = matches[i];
     var replacement;
-
+    
     if (m.loopSpec === '*') {
       replacement = executeLoopAllRows(m.loopContent, forPdf);
     } else if (m.loopSpec.startsWith('VIEW:')) {
@@ -3280,7 +3317,7 @@ async function processLoopsAsync(html, forPdf) {
       var tableParts = m.loopSpec.substring(6).split(':');
       var linkedTableName = tableParts[0].trim();
       var refColumn = tableParts[1].trim();
-
+      
       // Get current record ID
       var currentRecordId = tableData.id[currentRecordIndex];
       // Await the async function directly for PDF
@@ -3292,64 +3329,113 @@ async function processLoopsAsync(html, forPdf) {
       var filterVal = parts.slice(1).join('=').trim();
       replacement = executeLoop(filterCol, filterVal, m.loopContent, forPdf);
     }
-
+    
     resolved = resolved.substring(0, m.index) + replacement + resolved.substring(m.index + m.fullMatch.length);
   }
-
+  
   // Process other loop types (same as sync version)
   // Special case: handle loops inside table rows
   var tableLoopRegex = /<tr[^>]*>([^]*?)<td[^>]*>([^<]*\{\{#each\s+([^=}]+)=([^}]+)\}\}[^<]*)<\/td>([^]*?)<\/tr>([^]*?)<tr[^>]*>([^]*?)<\/tr>([^]*?)<tr[^>]*>([^]*?)<td[^>]*>([^<]*\{\{\/each\}\}[^<]*)<\/td>([^]*?)<\/tr>/gi;
-
+  
   resolved = resolved.replace(tableLoopRegex, function(match, before1, eachCell, filterCol, filterVal, after1, between, rowContent, after2, before3, endCell, after3) {
     var templateRow = '<tr>' + rowContent + '</tr>';
     var result = executeLoop(filterCol.trim(), filterVal.trim(), templateRow, forPdf);
     return result;
   });
-
+  
   // Simpler table loop
   var simpleTableLoopRegex = /<tr[^>]*>\s*<td[^>]*>\s*\{\{#each\s+([^=}]+)=([^}]+)\}\}\s*<\/td>\s*<\/tr>\s*(<tr[^>]*>[\s\S]*?<\/tr>)\s*<tr[^>]*>\s*<td[^>]*>\s*\{\{\/each\}\}\s*<\/td>\s*<\/tr>/gi;
-
+  
   resolved = resolved.replace(simpleTableLoopRegex, function(match, filterCol, filterVal, templateRows) {
     return executeLoop(filterCol.trim(), filterVal.trim(), templateRows, forPdf);
   });
-
+  
   // Regex to match {{#each Column=Value}}...{{/each}}
- var loopRegex = /\{\{#each\s+([^=}]+)=([^}]+)\}\}([\s\S]*?)\{\{\/each\}\}/g;
+  var loopRegex = /\{\{#each\s+([^=}]+)=([^}]+)\}\}([\s\S]*?)\{\{\/each\}\}/g;
   var styledLoopRegex = /<span[^>]*>\{\{#each\s+([^=}]+)=([^}]+)\}\}<\/span>([\s\S]*?)<span[^>]*>\{\{\/each\}\}<\/span>/g;
-
-  // Process styled loops first
+  
   resolved = resolved.replace(styledLoopRegex, function(match, filterCol, filterVal, loopContent) {
     return executeLoop(filterCol.trim(), filterVal.trim(), loopContent, forPdf);
   });
-
-  // Process plain text loops
+  
   resolved = resolved.replace(loopRegex, function(match, filterCol, filterVal, loopContent) {
     return executeLoop(filterCol.trim(), filterVal.trim(), loopContent, forPdf);
   });
+  
+  return resolved;
+}
 
+// Async version of resolveTemplate for PDF generation
+async function resolveTemplateAsync(html, record, forPdf) {
+  var resolved = html;
+  
+  // Process loops with async support for linked tables
+  resolved = await processLoopsAsync(resolved, forPdf);
+  
+  for (var col in record) {
+    var val = record[col];
+    var display = formatValueForDisplay(val);
+    var styledRegex = new RegExp('<span[^>]*>\\{\\{' + escapeRegex(col) + '\\}\\}</span>', 'g');
+    if (display) {
+      if (forPdf) {
+        resolved = resolved.replace(styledRegex, sanitize(display));
+      } else {
+        resolved = resolved.replace(styledRegex, '<span class="var-resolved">' + sanitize(display) + '</span>');
+      }
+    } else {
+      if (forPdf) {
+        resolved = resolved.replace(styledRegex, '<em>[' + col + ']</em>');
+      } else {
+        resolved = resolved.replace(styledRegex, '<span class="var-empty">[' + col + ': vide]</span>');
+      }
+    }
+    var plainRegex = new RegExp('\\{\\{' + escapeRegex(col) + '\\}\\}', 'g');
+    if (display) {
+      if (forPdf) {
+        resolved = resolved.replace(plainRegex, sanitize(display));
+      } else {
+        resolved = resolved.replace(plainRegex, '<span class="var-resolved">' + sanitize(display) + '</span>');
+      }
+    } else {
+      if (forPdf) {
+        resolved = resolved.replace(plainRegex, '<em>[' + col + ']</em>');
+      } else {
+        resolved = resolved.replace(plainRegex, '<span class="var-empty">[' + col + ': vide]</span>');
+      }
+    }
+  }
+  
+  if (forPdf) {
+    resolved = resolved.replace(/<div[^>]*class="page-break-marker"[^>]*>[\s\S]*?<\/div>/g, '<div style="page-break-after:always;"></div>');
+    resolved = resolved.replace(/background-color:\s*rgb\(243,\s*232,\s*255\);?/g, '');
+    resolved = resolved.replace(/background-color:\s*#f3e8ff;?/g, '');
+    resolved = resolved.replace(/color:\s*rgb\(124,\s*58,\s*237\);?/g, '');
+    resolved = resolved.replace(/color:\s*#7c3aed;?/g, '');
+    resolved = resolved.replace(/<table(?![^>]*style=)/g, '<table style="border-collapse:collapse;"');
+  }
   return resolved;
 }
 
 function executeLoopAllRows(loopContent, forPdf) {
   // Execute loop for rows from "Select By" filtered view
   // If no filtered records, fall back to all tableData rows
-
+  
   var recordsToUse = filteredRecords.length > 0 ? filteredRecords : null;
-
+  
   // If we have filtered records from "Select By", use them
   if (recordsToUse && recordsToUse.length > 0) {
     console.log('Using filtered records from Select By:', recordsToUse.length);
     var output = '';
     for (var j = 0; j < recordsToUse.length; j++) {
       var rowRecord = recordsToUse[j];
-
+      
       // Resolve variables in loopContent for this row
       var rowHtml = loopContent;
       for (var col in rowRecord) {
         if (col === 'id') continue;
         var val = rowRecord[col];
         var display = formatValueForDisplay(val);
-
+        
         // Replace styled spans
         var styledRegex = new RegExp('<span[^>]*>\\{\\{' + escapeRegex(col) + '\\}\\}</span>', 'g');
         if (display) {
@@ -3361,7 +3447,7 @@ function executeLoopAllRows(loopContent, forPdf) {
         } else {
           rowHtml = rowHtml.replace(styledRegex, '');
         }
-
+        
         // Replace plain text variables
         var plainRegex = new RegExp('\\{\\{' + escapeRegex(col) + '\\}\\}', 'g');
         if (display) {
@@ -3380,31 +3466,31 @@ function executeLoopAllRows(loopContent, forPdf) {
     }
     return output;
   }
-
+  
   // Fallback: use all rows from tableData
   if (!tableData || !tableColumns.length) return '';
-
+  
   // Get the number of rows from the first column
   var firstCol = tableColumns[0];
   var rowCount = tableData[firstCol] ? tableData[firstCol].length : 0;
-
+  
   if (rowCount === 0) {
     return '<span style="color:#f59e0b;font-style:italic;">[' + (currentLang === 'fr' ? 'Aucune ligne dans la vue' : 'No rows in view') + ']</span>';
   }
-
+  
   console.log('Using all rows from tableData (no Select By filter):', rowCount);
-
+  
   // Generate output for each row
   var output = '';
   for (var j = 0; j < rowCount; j++) {
     var rowRecord = getRecordAt(j);
-
+    
     // Resolve variables in loopContent for this row
     var rowHtml = loopContent;
     for (var col in rowRecord) {
       var val = rowRecord[col];
       var display = formatValueForDisplay(val);
-
+      
       // Replace styled spans
       var styledRegex = new RegExp('<span[^>]*>\\{\\{' + escapeRegex(col) + '\\}\\}</span>', 'g');
       if (display) {
@@ -3416,7 +3502,7 @@ function executeLoopAllRows(loopContent, forPdf) {
       } else {
         rowHtml = rowHtml.replace(styledRegex, '');
       }
-
+      
       // Replace plain text variables
       var plainRegex = new RegExp('\\{\\{' + escapeRegex(col) + '\\}\\}', 'g');
       if (display) {
@@ -3433,13 +3519,13 @@ function executeLoopAllRows(loopContent, forPdf) {
     rowHtml = resolveImagesInHtml(rowHtml, rowRecord, forPdf);
     output += rowHtml;
   }
-
+  
   return output;
 }
 
 function executeLoop(filterColumn, filterValue, loopContent, forPdf) {
   if (!tableData || !tableColumns.length) return '';
-
+  
   // Find the filter column in tableData
   var filterColData = tableData[filterColumn];
   if (!filterColData) {
@@ -3447,30 +3533,30 @@ function executeLoop(filterColumn, filterValue, loopContent, forPdf) {
     var availableCols = tableColumns.join(', ');
     return '<span style="color:red;">[Colonne "' + filterColumn + '" non trouvée. Colonnes disponibles: ' + availableCols + ']</span>';
   }
-
+  
   // Find all rows where filterColumn matches filterValue
   var matchingIndices = [];
   var sampleValues = [];
-
+  
   for (var i = 0; i < filterColData.length; i++) {
     var cellValue = filterColData[i];
     var cellStr = (cellValue === null || cellValue === undefined) ? '' : String(cellValue);
-
+    
     // Collect sample values for debug (first 3 unique)
     if (sampleValues.length < 3 && sampleValues.indexOf(cellStr) === -1) {
       sampleValues.push(cellStr);
     }
-
+    
     // Normalize for date comparison
     var normalizedCell = normalizeForComparison(cellStr);
     var normalizedFilter = normalizeForComparison(filterValue);
-
+    
     // Check if filter value is a reference display value (e.g., "DUMZ 60")
     // and if so, check if the resolved value matches
     var refMatch = false;
     var meta = columnMetadata[filterColumn];
     if (meta && meta.type) {
-      var refTypeMatch = meta.type.match(/^Ref:(.+)\$/);
+      var refTypeMatch = meta.type.match(/^Ref:(.+)$/);
       if (refTypeMatch) {
         var refTableName = refTypeMatch[1];
         var refDisplayData = referenceDisplayValues[refTableName];
@@ -3482,7 +3568,7 @@ function executeLoop(filterColumn, filterValue, loopContent, forPdf) {
             if (!refMap) continue;
             for (var refId in refMap) {
               var refDisplayVal = refMap[refId];
-              if (refDisplayVal === filterValue ||
+              if (refDisplayVal === filterValue || 
                   normalizeForComparison(refDisplayVal) === normalizedFilter) {
                 // Check if the resolved cell value matches this reference's resolved value
                 var resolvedRefVal = lookupRefValue(referenceTables[refTableName], parseInt(refId), findDisplayColumn(referenceTables[refTableName], meta.visibleCol));
@@ -3496,9 +3582,9 @@ function executeLoop(filterColumn, filterValue, loopContent, forPdf) {
         }
       }
     }
-
+    
     // Flexible matching: exact match, contains, normalized match, or reference match
-    if (cellStr === filterValue ||
+    if (cellStr === filterValue || 
         cellStr.indexOf(filterValue) !== -1 ||
         normalizedCell === normalizedFilter ||
         normalizedCell.indexOf(normalizedFilter) !== -1 ||
@@ -3506,25 +3592,25 @@ function executeLoop(filterColumn, filterValue, loopContent, forPdf) {
       matchingIndices.push(i);
     }
   }
-
+  
   if (matchingIndices.length === 0) {
     // No matches found - show sample values to help user
     var sampleStr = sampleValues.map(function(v) { return '"' + v + '"'; }).join(', ');
     return '<span style="color:#f59e0b;font-style:italic;">[Aucune ligne où ' + filterColumn + '="' + filterValue + '". Valeurs existantes: ' + sampleStr + '...]</span>';
   }
-
+  
   // Generate output for each matching row
   var output = '';
   for (var j = 0; j < matchingIndices.length; j++) {
     var rowIndex = matchingIndices[j];
     var rowRecord = getRecordAt(rowIndex);
-
+    
     // Resolve variables in loopContent for this row
     var rowHtml = loopContent;
     for (var col in rowRecord) {
       var val = rowRecord[col];
       var display = formatValueForDisplay(val);
-
+      
       // Replace styled spans
       var styledRegex = new RegExp('<span[^>]*>\\{\\{' + escapeRegex(col) + '\\}\\}</span>', 'g');
       if (display) {
@@ -3536,8 +3622,8 @@ function executeLoop(filterColumn, filterValue, loopContent, forPdf) {
       } else {
         rowHtml = rowHtml.replace(styledRegex, '');
       }
-
-      // Replace plain text variables
+      
+      // Replace plain text {{col}}
       var plainRegex = new RegExp('\\{\\{' + escapeRegex(col) + '\\}\\}', 'g');
       if (display) {
         if (forPdf) {
@@ -3549,41 +3635,42 @@ function executeLoop(filterColumn, filterValue, loopContent, forPdf) {
         rowHtml = rowHtml.replace(plainRegex, '');
       }
     }
+    
     // Resolve images for this row
     rowHtml = resolveImagesInHtml(rowHtml, rowRecord, forPdf);
     output += rowHtml;
   }
-
+  
   return output;
 }
 
 function resolveTemplate(html, record, forPdf) {
   var resolved = html;
-
-  // Process loops
+  
+  // Process {{#each Column=Value}}...{{/each}} loops first
   resolved = processLoops(resolved, forPdf);
-
+  
   // Remove the green styling spans around {{IMG:...}} before processing
-  resolved = resolved.replace(/<span[^>]*style="[^"]*background:#dcfce7[^"]*"[^>]*>(\{\{IMG:[^}]+\}\})<\/span>/g, '\$1');
-
+  resolved = resolved.replace(/<span[^>]*style="[^"]*background:#dcfce7[^"]*"[^>]*>(\{\{IMG:[^}]+\}\})<\/span>/g, '$1');
+  
   // Process {{IMG:column}} or {{IMG:column:width}} for images
   var imgRegex = /\{\{IMG:([^:}]+)(?::(\d+))?\}\}/g;
-  resolved = resolved.replace(imgRegex, function(match, colName, width) {
+  resolved = resolved.replace(imgRegex, function(colName, width) {
     var imgValue = record[colName];
     if (!imgValue) {
       return forPdf ? '' : '<span class="var-empty">[IMG: ' + colName + ' vide]</span>';
     }
-
+    
     var imgUrl = resolveImageUrl(imgValue);
     if (!imgUrl) {
       return forPdf ? '' : '<span class="var-empty">[IMG: format non supporté]</span>';
     }
-
+    
     var imgWidth = width ? width + 'px' : 'auto';
     var imgStyle = 'max-width:100%;height:auto;' + (width ? 'width:' + imgWidth + ';' : '');
     return '<img src="' + imgUrl + '" style="' + imgStyle + '" alt="' + colName + '">';
   });
-
+  
   for (var col in record) {
     var val = record[col];
     var display = formatValueForDisplay(val);
@@ -3625,9 +3712,9 @@ function resolveTemplate(html, record, forPdf) {
   // For PDF: strip only variable styling (purple colors), keep table styles
   if (forPdf) {
     // Remove variable highlight colors only
-    resolved = resolved.replace(/background-color:\s*rgb$243,\s*232,\s*255$;?/g, '');
+    resolved = resolved.replace(/background-color:\s*rgb\(243,\s*232,\s*255\);?/g, '');
     resolved = resolved.replace(/background-color:\s*#f3e8ff;?/g, '');
-    resolved = resolved.replace(/color:\s*rgb$124,\s*58,\s*237$;?/g, '');
+    resolved = resolved.replace(/color:\s*rgb\(124,\s*58,\s*237\);?/g, '');
     resolved = resolved.replace(/color:\s*#7c3aed;?/g, '');
     // Keep table styles intact - only add border-collapse if missing
     resolved = resolved.replace(/<table(?![^>]*style=)/g, '<table style="border-collapse:collapse;"');
@@ -3636,177 +3723,7 @@ function resolveTemplate(html, record, forPdf) {
 }
 
 function escapeRegex(str) {
-  return str.replace(/[.*+?^\${}()|[\]\\]/g, '\\\$&');
-}
-
-function normalizeForComparison(value) {
-  if (!value) return '';
-  var str = String(value).trim().toLowerCase();
-
-  // Handle Grist timestamp (number of seconds since epoch)
-  if (/^\d{10,}\$/.test(str)) {
-    var date = new Date(parseInt(str) * 1000);
-    if (!isNaN(date.getTime())) {
-      // Return multiple formats for matching
-      var day = String(date.getDate()).padStart(2, '0');
-      var month = String(date.getMonth() + 1).padStart(2, '0');
-      var year = date.getFullYear();
-      var shortYear = String(year).slice(-2);
-      return day + '/' + month + '/' + year + '|' + day + '/' + month + '/' + shortYear + '|' + year + '-' + month + '-' + day;
-    }
-  }
-
-  // Handle ISO date format (2026-02-16)
-  var isoMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (isoMatch) {
-    var y = isoMatch[1], m = isoMatch[2], d = isoMatch[3];
-    return d + '/' + m + '/' + y + '|' + d + '/' + m + '/' + y.slice(-2) + '|' + y + '-' + m + '-' + d;
-  }
-
-  // Handle French date format (16/02/2026 or 16/02/26)
-  var frMatch = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
-  if (frMatch) {
-    var dd = frMatch[1].padStart(2, '0');
-    var mm = frMatch[2].padStart(2, '0');
-    var yy = frMatch[3];
-    if (yy.length === 2) {
-      yy = (parseInt(yy) > 50 ? '19' : '20') + yy;
-    }
-    return dd + '/' + mm + '/' + yy + '|' + dd + '/' + mm + '/' + yy.slice(-2) + '|' + yy + '-' + mm + '-' + dd;
-  }
-
-  return str;
-}
-
-function formatValueForDisplay(value) {
-  if (value === null || value === undefined || value === '') return '';
-
-  // Handle booleans - convert to readable format or checkbox
-  // Check both selectors (preview and PDF tab)
-  var boolFormatSelect = document.getElementById('bool-format') || document.getElementById('bool-format-preview');
-  var useCheckbox = boolFormatSelect && boolFormatSelect.value === 'checkbox';
-
-  if (value === true || value === 'true') {
-    return useCheckbox ? '☑' : (currentLang === 'fr' ? 'Oui' : 'Yes');
-  }
-  if (value === false || value === 'false') {
-    return useCheckbox ? '☐' : (currentLang === 'fr' ? 'Non' : 'No');
-  }
-
-  var str = String(value);
-
-  // Check if it's a Grist timestamp (number of seconds since epoch, typically 10+ digits)
-  if (/^\d{10,}\$/.test(str)) {
-    var timestamp = parseInt(str);
-    var date = new Date(timestamp * 1000);
-    if (!isNaN(date.getTime())) {
-      var day = String(date.getDate()).padStart(2, '0');
-      var month = String(date.getMonth() + 1).padStart(2, '0');
-      var year = date.getFullYear();
-      return day + '/' + month + '/' + year;
-    }
-  }
-
-  // Check if it's an ISO date format (YYYY-MM-DD) and convert to French format (DD/MM/YYYY)
-  var isoDateMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})\$/);
-  if (isoDateMatch) {
-    var year = isoDateMatch[1];
-    var month = isoDateMatch[2];
-    var day = isoDateMatch[3];
-    return day + '/' + month + '/' + year;
-  }
-
-  return str;
-}
-
-function resolveImageUrl(value) {
-  if (!value) return null;
-
-  var str = String(value).trim();
-
-  // 1. Already a web URL (http:// or https://)
-  if (str.startsWith('http://') || str.startsWith('https://')) {
-    return str;
-  }
-
-  // 2. Grist Attachment format - array of attachment objects [{id: 123, ...}]
-  if (Array.isArray(value) && value.length > 0 && value[0].id) {
-    // Build Grist attachment URL
-    var attachmentId = value[0].id;
-    if (gristServerUrl && gristDocId) {
-      return gristServerUrl + '/api/docs/' + gristDocId + '/attachments/' + attachmentId + '/download';
-    }
-    return null;
-  }
-
-  // 3. Grist Attachment ID (just a number)
-  if (/^\d+\$/.test(str)) {
-    if (gristServerUrl && gristDocId) {
-      return gristServerUrl + '/api/docs/' + gristDocId + '/attachments/' + str + '/download';
-    }
-    return null;
-  }
-
-  // 4. Data URL (base64 encoded image)
-  if (str.startsWith('data:image/')) {
-    return str;
-  }
-
-  // 5. Relative path with configured base URL
-  var imageBaseUrl = document.getElementById('image-base-url')?.value;
-  if (imageBaseUrl) {
-    // Remove trailing slash from base URL
-    imageBaseUrl = imageBaseUrl.replace(/\/+\$/, '');
-    // Remove leading slash from path
-    var path = str.replace(/^\/+/, '');
-    return imageBaseUrl + '/' + path;
-  }
-
-  // 6. Try as-is (might be a relative URL that works)
-  return str;
-}
-
-function resolveImagesInHtml(html, record, forPdf) {
-  // First, remove the green styling spans around {{IMG:...}}
-  html = html.replace(/<span[^>]*style="[^"]*background:#dcfce7[^"]*"[^>]*>(\{\{IMG:[^}]+\}\})<\/span>/g, '\$1');
-
-  var imgRegex = /\{\{IMG:([^:}]+)(?::(\d+))?\}\}/g;
-  return html.replace(imgRegex, function(match, colName, width) {
-    var imgValue = record[colName];
-    if (!imgValue) {
-      return forPdf ? '' : '<span class="var-empty">[IMG: ' + colName + ' vide]</span>';
-    }
-
-    var imgUrl = resolveImageUrl(imgValue);
-    if (!imgUrl) {
-      return forPdf ? '' : '<span class="var-empty">[IMG: format non supporté]</span>';
-    }
-
-    var imgWidth = width ? width + 'px' : 'auto';
-    var imgStyle = 'max-width:100%;height:auto;' + (width ? 'width:' + imgWidth + ';' : '');
-    return '<img src="' + imgUrl + '" style="' + imgStyle + '" alt="' + colName + '">';
-  });
-}
-
-// =============================================================================
-// PREVIEW (MAIL MERGE)
-// =============================================================================
-
-function getRecordCount() {
-  if (!tableData || !tableColumns.length) return 0;
-  var firstCol = tableColumns[0];
-  return (tableData[firstCol] || []).length;
-}
-
-function getRecordAt(index) {
-  if (!tableData || index < 0) return {};
-  var record = {};
-  for (var i = 0; i < tableColumns.length; i++) {
-    var col = tableColumns[i];
-    var arr = tableData[col] || [];
-    record[col] = (index < arr.length) ? arr[index] : '';
-  }
-  return record;
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function renderPreview() {
@@ -3850,7 +3767,7 @@ function renderPreview() {
 
   // Split at explicit page break markers first
   var explicitPages = splitOnPageBreaks(resolved);
-
+  
   // Then auto-paginate each section that overflows
   var pages = [];
   for (var ep = 0; ep < explicitPages.length; ep++) {
@@ -3863,7 +3780,7 @@ function renderPreview() {
     tmp.innerHTML = p;
     return tmp.textContent.trim().length > 0 || tmp.querySelector('img, table');
   });
-
+  
   var html = '';
   for (var p = 0; p < pages.length; p++) {
     html += '<div class="preview-page">' + pages[p] + '</div>';
@@ -3906,37 +3823,37 @@ function autoPageBreak(html, wrapper) {
   var paddingTop = 40, paddingBottom = 40;
   var maxH = pageHeight - paddingTop - paddingBottom;
   var pageW = isLetter ? '816px' : '794px';
-
+  
   // Hidden measurer with same styles as preview-page
   var m = document.createElement('div');
   m.style.cssText = 'position:absolute;left:-9999px;top:-9999px;width:' + pageW + ';padding:0 60px;font-family:Times New Roman,Times,serif;font-size:14px;line-height:1.6;visibility:hidden;';
   document.body.appendChild(m);
-
+  
   var container = document.createElement('div');
   container.innerHTML = html;
-
+  
   var pages = [];
   var curHtml = '';
   var curH = 0;
-
+  
   var children = Array.prototype.slice.call(container.childNodes);
-
+  
   for (var i = 0; i < children.length; i++) {
     var child = children[i];
     var childOuterHtml = child.outerHTML || child.textContent || '';
     if (!childOuterHtml.trim()) continue;
-
+    
     // Measure child height
     m.innerHTML = childOuterHtml;
     var cH = m.offsetHeight;
-
+    
     // Case 1: fits on current page
     if (curH + cH <= maxH) {
       curHtml += childOuterHtml;
       curH += cH;
       continue;
     }
-
+    
     // Case 2: doesn't fit, and it's a TABLE -> split rows
     if (child.nodeName === 'TABLE') {
       var tPages = splitTableAcrossPages(child, m, maxH, curH);
@@ -3961,7 +3878,7 @@ function autoPageBreak(html, wrapper) {
       }
       continue;
     }
-
+    
     // Case 3: non-table element doesn't fit -> push current page, start new
     if (curHtml.trim()) {
       pages.push(curHtml);
@@ -3969,11 +3886,11 @@ function autoPageBreak(html, wrapper) {
     curHtml = childOuterHtml;
     curH = cH;
   }
-
+  
   if (curHtml.trim()) {
     pages.push(curHtml);
   }
-
+  
   document.body.removeChild(m);
   return pages.length > 0 ? pages : [html];
 }
@@ -3981,14 +3898,14 @@ function autoPageBreak(html, wrapper) {
 function splitTableAcrossPages(table, measurer, maxH, startH) {
   var thead = table.querySelector('thead');
   var theadHtml = thead ? thead.outerHTML : '';
-
+  
   // Measure thead
   var theadH = 0;
   if (thead) {
     measurer.innerHTML = '<table style="border-collapse:collapse;width:100%">' + theadHtml + '</table>';
     theadH = measurer.offsetHeight;
   }
-
+  
   // Collect body rows (exclude thead rows)
   var allRows = table.querySelectorAll('tr');
   var bodyRows = [];
@@ -3997,7 +3914,7 @@ function splitTableAcrossPages(table, measurer, maxH, startH) {
       bodyRows.push(allRows[r]);
     }
   }
-
+  
   // Build table opening tag preserving original attributes
   var attrs = '';
   for (var a = 0; a < table.attributes.length; a++) {
@@ -4012,34 +3929,34 @@ function splitTableAcrossPages(table, measurer, maxH, startH) {
     attrs += ' style="border-collapse:collapse;width:100%"';
   }
   var tOpen = '<table' + attrs + '>';
-
+  
   var pages = [];
   var curRows = '';
   var curH = startH + theadH;
-
+  
   for (var r = 0; r < bodyRows.length; r++) {
     var rowHtml = bodyRows[r].outerHTML;
-
+    
     // Measure this row
     measurer.innerHTML = '<table style="border-collapse:collapse;width:100%"><tbody>' + rowHtml + '</tbody></table>';
     var rH = measurer.offsetHeight;
-
+    
     // Would this row overflow?
     if (curH + rH > maxH && curRows.length > 0) {
       pages.push(tOpen + theadHtml + '<tbody>' + curRows + '</tbody></table>');
       curRows = '';
       curH = theadH; // new page starts with thead
     }
-
+    
     curRows += rowHtml;
     curH += rH;
   }
-
+  
   // Don't forget remaining rows!
   if (curRows.length > 0) {
     pages.push(tOpen + theadHtml + '<tbody>' + curRows + '</tbody></table>');
   }
-
+  
   return pages.length > 0 ? pages : [table.outerHTML];
 }
 
@@ -4215,12 +4132,12 @@ async function renderHtmlToPdfPages(html, pdf, pageWidth, pageHeight, pageSize) 
   var baseCss = 'position:absolute;left:-9999px;top:0;width:' + pixelWidth + 'px;padding:40px 60px;font-family:"Times New Roman",Times,serif;font-size:14px;line-height:1.6;background:white;';
 
   // Use the same auto-pagination as preview
+  var explicitPages = splitOnPageBreaks(html);
+  
+  // Create a temporary wrapper to pass to autoPageBreak
   var fakeWrapper = document.createElement('div');
   fakeWrapper.classList.add(pageSize === 'letter' ? 'preview-format-letter' : 'preview-format-a4');
-
-  var explicitPages = splitOnPageBreaks(html);
-
-  // Create a temporary wrapper to pass to autoPageBreak
+  
   var pages = [];
   for (var ep = 0; ep < explicitPages.length; ep++) {
     var subPages = autoPageBreak(explicitPages[ep], fakeWrapper);
@@ -4242,7 +4159,7 @@ async function renderHtmlToPdfPages(html, pdf, pageWidth, pageHeight, pageSize) 
     var tempDiv = document.createElement('div');
     tempDiv.style.cssText = baseCss;
     tempDiv.innerHTML = pages[s];
-
+    
     // Pre-style tables and cells before appending to DOM
     var tables = tempDiv.querySelectorAll('table');
     tables.forEach(function(table) {
@@ -4250,21 +4167,21 @@ async function renderHtmlToPdfPages(html, pdf, pageWidth, pageHeight, pageSize) 
       table.style.borderCollapse = 'collapse';
       table.style.tableLayout = 'auto';
       table.style.pageBreakInside = 'avoid';
-
+      
       // Check if table has a custom border
       var tableBorder = table.style.border;
       var hasTableBorder = tableBorder && tableBorder !== 'none' && tableBorder !== '';
-
+      
       // Apply cell styles
       var cells = table.querySelectorAll('td, th');
       cells.forEach(function(cell) {
         // Check if cell has ANY border style (individual or shorthand)
-        var hasCellBorder = cell.style.border ||
-                        cell.style.borderTop ||
-                        cell.style.borderBottom ||
-                        cell.style.borderLeft ||
+        var hasCellBorder = cell.style.border || 
+                        cell.style.borderTop || 
+                        cell.style.borderBottom || 
+                        cell.style.borderLeft || 
                         cell.style.borderRight;
-
+        
         // If table has custom border, apply same border to cells (no default black)
         if (hasTableBorder && !hasCellBorder) {
           cell.style.border = tableBorder;
@@ -4273,32 +4190,31 @@ async function renderHtmlToPdfPages(html, pdf, pageWidth, pageHeight, pageSize) 
           cell.style.border = '1px solid #000';
         }
         // If cell has its own border, keep it as is
-
+        
         if (!cell.style.padding) {
           cell.style.padding = '4px 8px';
         }
       });
     });
     var cells = tempDiv.querySelectorAll('td, th');
-
     cells.forEach(function(cell) {
-
+      
       // Handle vertical text BEFORE rendering - html2canvas doesn't support writing-mode
       var writingMode = cell.style.writingMode;
       if (writingMode === 'vertical-rl' || writingMode === 'vertical-lr') {
         // Get the text content to calculate dimensions
         var textContent = cell.textContent || cell.innerText || '';
         textContent = textContent.trim();
-
+        
         // Calculate required height based on text length (approx 8px per character)
         var textWidth = textContent.length * 8;
         var requiredHeight = Math.max(textWidth + 20, 60); // Add padding
-
+        
         // Reset writing-mode on the cell
         cell.style.writingMode = 'horizontal-tb';
         cell.style.textOrientation = 'mixed';
         cell.style.transform = '';
-
+        
         // Set cell dimensions to accommodate rotated text
         cell.style.height = requiredHeight + 'px';
         cell.style.minHeight = requiredHeight + 'px';
@@ -4308,7 +4224,7 @@ async function renderHtmlToPdfPages(html, pdf, pageWidth, pageHeight, pageSize) 
         cell.style.textAlign = 'center';
         cell.style.position = 'relative';
         cell.style.overflow = 'visible';
-
+        
         // Create a wrapper div with rotation
         var wrapper = document.createElement('div');
         wrapper.style.position = 'absolute';
@@ -4316,26 +4232,26 @@ async function renderHtmlToPdfPages(html, pdf, pageWidth, pageHeight, pageSize) 
         wrapper.style.top = '50%';
         wrapper.style.whiteSpace = 'nowrap';
         wrapper.style.transformOrigin = 'center center';
-
+        
         if (writingMode === 'vertical-rl') {
           wrapper.style.transform = 'translate(-50%, -50%) rotate(-90deg)';
         } else {
           wrapper.style.transform = 'translate(-50%, -50%) rotate(90deg)';
         }
-
+        
         wrapper.textContent = textContent;
         cell.innerHTML = '';
         cell.appendChild(wrapper);
       }
     });
-
+    
     // Pre-style images
     var images = tempDiv.querySelectorAll('img');
     images.forEach(function(img) {
       img.style.maxWidth = '100%';
       img.style.height = 'auto';
     });
-
+    
     document.body.appendChild(tempDiv);
 
     // Convert images to data URLs to avoid CORS issues
@@ -4345,7 +4261,7 @@ async function renderHtmlToPdfPages(html, pdf, pageWidth, pageHeight, pageSize) 
         if (!originalSrc || originalSrc.indexOf('data:') === 0) {
           return; // Already a data URL or no src
         }
-
+        
         try {
           // Try to fetch the image and convert to data URL
           var response = await fetch(originalSrc, { mode: 'cors', credentials: 'include' });
@@ -4362,7 +4278,7 @@ async function renderHtmlToPdfPages(html, pdf, pageWidth, pageHeight, pageSize) 
           console.warn('Could not convert image to data URL:', originalSrc, e);
           // Try loading normally as fallback
         }
-
+        
         // Wait for image to be ready
         if (!img.complete) {
           await new Promise(function(resolve) {
@@ -4390,491 +4306,415 @@ async function renderHtmlToPdfPages(html, pdf, pageWidth, pageHeight, pageSize) 
       windowWidth: tempDiv.scrollWidth,
       windowHeight: tempDiv.scrollHeight,
       onclone: function(clonedDoc, clonedElement) {
-// Fix for cloned elements in html2canvas
+        // Ensure tables are fully visible in the cloned element
         var clonedTables = clonedElement.querySelectorAll('table');
         clonedTables.forEach(function(table) {
           table.style.width = '100%';
           table.style.borderCollapse = 'collapse';
           table.style.tableLayout = 'auto';
-          table.style.pageBreakInside = 'avoid';
-
-          var cells = table.querySelectorAll('td, th');
-          cells.forEach(function(cell) {
-            if (!cell.style.border) {
-              cell.style.border = '1px solid #000';
-            }
-            if (!cell.style.padding) {
-              cell.style.padding = '4px 8px';
-            }
-          });
+          table.style.display = 'table';
+          table.style.visibility = 'visible';
         });
-      }
-    });
-
-    // Calculate scale to fit page width
-    var canvasWidth = canvas.width;
-    var canvasHeight = canvas.height;
-    var scale = imgWidth / canvasWidth;
-    var imgHeight = canvasHeight * scale;
-
-    // Add image to PDF
-    var imgData = canvas.toDataURL('image/jpeg', 0.8);
-    pdf.addImage(imgData, 'JPEG', margin, margin, imgWidth, imgHeight);
-
-    // Clean up
-    document.body.removeChild(tempDiv);
-  }
-}
-
-// =============================================================================
-// ASYNC TEMPLATE RESOLUTION
-// =============================================================================
-
-async function resolveTemplateAsync(html, record, forPdf) {
-  // First, process loops synchronously (except TABLE: loops)
-  var resolved = processLoops(html, forPdf);
-
-  // Then handle TABLE: loops asynchronously
-  var tableLoopRegex = /<!--LOOP:TABLE:([^:]+):([^-]+)-->([\s\S]*?)<!--\/LOOP-->/gi;
-  var matches = [];
-  var match;
-
-  // Collect all TABLE: loops
-  while ((match = tableLoopRegex.exec(resolved)) !== null) {
-    matches.push({
-      fullMatch: match[0],
-      tableName: match[1],
-      refColumn: match[2],
-      loopContent: match[3],
-      index: match.index
-    });
-  }
-
-  // Process matches in reverse order to preserve indices
-  for (var i = matches.length - 1; i >= 0; i--) {
-    var m = matches[i];
-    var replacement = await executeLoopLinkedTableAsync(m.tableName, m.refColumn, m.loopContent, forPdf, record.id);
-    resolved = resolved.substring(0, m.index) + replacement + resolved.substring(m.index + m.fullMatch.length);
-  }
-
-  // Process remaining variables
-  for (var col in record) {
-    var val = record[col];
-    var display = formatValueForDisplay(val);
-
-    // Replace styled spans
-    var styledRegex = new RegExp('<span[^>]*>\\{\\{' + escapeRegex(col) + '\\}\\}</span>', 'g');
-    if (display) {
-      if (forPdf) {
-        resolved = resolved.replace(styledRegex, sanitize(display));
-      } else {
-        resolved = resolved.replace(styledRegex, '<span class="var-resolved">' + sanitize(display) + '</span>');
-      }
-    } else {
-      if (forPdf) {
-        resolved = resolved.replace(styledRegex, '<em>[' + col + ']</em>');
-      } else {
-        resolved = resolved.replace(styledRegex, '<span class="var-empty">[' + col + ': vide]</span>');
-      }
-    }
-
-    // Replace plain text variables
-    var plainRegex = new RegExp('\\{\\{' + escapeRegex(col) + '\\}\\}', 'g');
-    if (display) {
-      if (forPdf) {
-        resolved = resolved.replace(plainRegex, sanitize(display));
-      } else {
-        resolved = resolved.replace(plainRegex, '<span class="var-resolved">' + sanitize(display) + '</span>');
-      }
-    } else {
-      if (forPdf) {
-        resolved = resolved.replace(plainRegex, '<em>[' + col + ']</em>');
-      } else {
-        resolved = resolved.replace(plainRegex, '<span class="var-empty">[' + col + ': vide]</span>');
-      }
-    }
-  }
-
-  // Process images
-  resolved = resolveImagesInHtml(resolved, record, forPdf);
-
-  // For PDF: remove page-break markers (keep them only as split points, not visible)
-  if (forPdf) {
-    resolved = resolved.replace(/<div[^>]*class="page-break-marker"[^>]*>[\s\S]*?<\/div>/g, '<div style="page-break-after:always;"></div>');
-  }
-
-  return resolved;
-}
-
-// =============================================================================
-// WORD IMPORT
-// =============================================================================
-
-function setupWordImport() {
-  var dropArea = document.getElementById('word-import-drop');
-  var fileInput = document.getElementById('word-import-input');
-
-  if (!dropArea || !fileInput) return;
-
-  // Prevent default drag behaviors
-  ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(function(eventName) {
-    dropArea.addEventListener(eventName, preventDefaults, false);
-  });
-
-  function preventDefaults(e) {
-    e.preventDefault();
-    e.stopPropagation();
-  }
-
-  // Highlight drop area when item is dragged over it
-  ['dragenter', 'dragover'].forEach(function(eventName) {
-    dropArea.addEventListener(eventName, function() {
-      dropArea.classList.add('highlight');
-    }, false);
-  });
-
-  ['dragleave', 'drop'].forEach(function(eventName) {
-    dropArea.addEventListener(eventName, function() {
-      dropArea.classList.remove('highlight');
-    }, false);
-  });
-
-  // Handle dropped files
-  dropArea.addEventListener('drop', handleDrop, false);
-  fileInput.addEventListener('change', handleFiles, false);
-
-  function handleDrop(e) {
-    var dt = e.dataTransfer;
-    var files = dt.files;
-    handleFiles({ target: { files: files } });
-  }
-
-  function handleFiles(e) {
-    var files = e.target.files;
-    if (files.length === 0) return;
-
-    var file = files[0];
-    if (!file.name.toLowerCase().endsWith('.docx')) {
-      showToast(t('importError') + (currentLang === 'fr' ? 'Seuls les fichiers .docx sont supportés' : 'Only .docx files are supported'), 'error');
-      return;
-    }
-
-    var reader = new FileReader();
-    reader.onload = function(e) {
-      var arrayBuffer = e.target.result;
-      mammoth.extractRawText({ arrayBuffer: arrayBuffer })
-        .then(function(result) {
-          var html = result.value;
-          // Clean up the HTML
-          html = html.replace(/<p[^>]*>\s*<\/p>/g, '');
-          html = html.replace(/<p[^>]*><\/p>/g, '');
-          html = html.replace(/<p[^>]*><br[^>]*><\/p>/g, '<p><br></p>');
-          html = html.replace(/<p[^>]*><br[^>]*><br[^>]*><\/p>/g, '<p><br><br></p>');
-          html = html.replace(/<p[^>]*><br[^>]*><br[^>]*><br[^>]*><\/p>/g, '<p><br><br><br></p>');
-
-          // Set the editor content
-          if (editorInstance) {
-            setEditorHtml(html);
-            templateHtml = html;
-            showToast(t('importSuccess'), 'success');
+        // Ensure all rows are visible
+        var clonedRows = clonedElement.querySelectorAll('tr');
+        clonedRows.forEach(function(row) {
+          row.style.display = 'table-row';
+          row.style.visibility = 'visible';
+        });
+        // Ensure all cells are visible (preserve existing borders)
+        var clonedCells = clonedElement.querySelectorAll('td, th');
+        clonedCells.forEach(function(cell) {
+          // Only set border if none exists
+          if (!cell.style.border && !cell.style.borderTop && !cell.style.borderBottom && !cell.style.borderLeft && !cell.style.borderRight) {
+            cell.style.border = '1px solid #000';
           }
-        })
-        .catch(function(error) {
-          showToast(t('importError') + error.message, 'error');
+          if (!cell.style.padding) {
+            cell.style.padding = '4px 8px';
+          }
+          cell.style.display = 'table-cell';
+          cell.style.visibility = 'visible';
+          
+          // Handle vertical text for PDF - html2canvas doesn't support writing-mode
+          // Convert to rotated text using transform instead
+          var writingMode = cell.style.writingMode;
+          if (writingMode === 'vertical-rl' || writingMode === 'vertical-lr') {
+            // Get the text content
+            var textContent = cell.textContent || cell.innerText;
+            var cellHeight = cell.offsetHeight || 60;
+            var cellWidth = cell.offsetWidth || 30;
+            
+            // Reset writing-mode and use transform rotation instead
+            cell.style.writingMode = 'horizontal-tb';
+            cell.style.textOrientation = 'mixed';
+            
+            // Create a wrapper span with rotation
+            var wrapper = document.createElement('span');
+            wrapper.style.display = 'inline-block';
+            wrapper.style.whiteSpace = 'nowrap';
+            
+            if (writingMode === 'vertical-rl') {
+              // Bottom to top: rotate -90deg
+              wrapper.style.transform = 'rotate(-90deg)';
+              wrapper.style.transformOrigin = 'center center';
+            } else {
+              // Top to bottom (vertical-lr with 180deg): rotate 90deg
+              wrapper.style.transform = 'rotate(90deg)';
+              wrapper.style.transformOrigin = 'center center';
+            }
+            
+            wrapper.textContent = textContent;
+            cell.innerHTML = '';
+            cell.appendChild(wrapper);
+            
+            // Adjust cell dimensions for rotated content
+            cell.style.verticalAlign = 'middle';
+            cell.style.textAlign = 'center';
+            cell.style.overflow = 'visible';
+          }
         });
-    };
-    reader.readAsArrayBuffer(file);
-  }
-}
-
-// =============================================================================
-// TEMPLATE MANAGEMENT
-// =============================================================================
-
-async function saveTemplate() {
-  if (!selectedTable) {
-    showToast(currentLang === 'fr' ? 'Veuillez d\'abord sélectionner une table.' : 'Please select a table first.', 'error');
-    return;
-  }
-
-  var templateName = document.getElementById('template-name').value.trim();
-  if (!templateName) {
-    showToast(currentLang === 'fr' ? 'Veuillez donner un nom au modèle.' : 'Please give the template a name.', 'error');
-    return;
-  }
-
-  var html = getEditorHtml();
-  if (!html || !html.trim()) {
-    showToast(currentLang === 'fr' ? 'Le modèle est vide.' : 'The template is empty.', 'error');
-    return;
-  }
-
-  try {
-    // Save to Grist widget options
-    var key = 'template_' + selectedTable;
-    var options = {};
-    options[key] = html;
-    options['template_name_' + selectedTable] = templateName;
-
-    await grist.widgetApi.setOptions(options);
-    showToast(t('templateSaved'), 'success');
-
-    // Refresh template list
-    await refreshTemplateList();
-  } catch (error) {
-    console.error('Error saving template:', error);
-    showToast(t('importError') + error.message, 'error');
-  }
-}
-
-async function refreshTemplateList() {
-  var select = document.getElementById('template-select');
-  if (!select) return;
-
-  try {
-    var options = await grist.widgetApi.getOptions();
-    var templates = [];
-
-    // Find all template_* keys
-    for (var key in options) {
-      if (key.startsWith('template_')) {
-        var tableName = key.substring(9); // Remove 'template_' prefix
-        var nameKey = 'template_name_' + tableName;
-        var name = options[nameKey] || tableName;
-        templates.push({
-          table: tableName,
-          name: name,
-          key: key
+        // Ensure images are visible
+        var clonedImages = clonedElement.querySelectorAll('img');
+        clonedImages.forEach(function(img) {
+          img.style.maxWidth = '100%';
+          img.style.visibility = 'visible';
         });
       }
-    }
-
-    // Sort by name
-    templates.sort(function(a, b) {
-      return a.name.localeCompare(b.name);
     });
 
-    // Populate select
-    select.innerHTML = '<option value="">' + t('templateSelectDefault') + '</option>';
-    for (var i = 0; i < templates.length; i++) {
-      var opt = document.createElement('option');
-      opt.value = templates[i].key;
-      opt.textContent = templates[i].name + ' (' + templates[i].table + ')';
-      select.appendChild(opt);
-    }
+    document.body.removeChild(tempDiv);
 
-  } catch (error) {
-    console.error('Error refreshing template list:', error);
+    var blockImgHeight = (canvas.height * imgWidth) / canvas.width;
+    var imgData = canvas.toDataURL('image/jpeg', 0.95);
+
+    // Each page is pre-paginated to fit within A4/Letter height
+    // Just render it at the top of the current PDF page
+    pdf.addImage(imgData, 'JPEG', margin, margin, imgWidth, Math.min(blockImgHeight, availableHeight));
   }
 }
 
-async function loadTemplate() {
-  var select = document.getElementById('template-select');
-  if (!select) return;
+function splitHtmlIntoPageSections(html) {
+  // Create a temporary container to parse the HTML
+  var container = document.createElement('div');
+  container.innerHTML = html;
 
-  var key = select.value;
-  if (!key) return;
+  var sections = [];
+  var currentHtml = '';
+  var hasExplicitPageBreak = false;
 
-  try {
-    var options = await grist.widgetApi.getOptions();
-    var html = options[key];
-    if (html) {
-      setEditorHtml(html);
-      templateHtml = html;
-      showToast(t('templateLoaded'), 'success');
-    }
-  } catch (error) {
-    console.error('Error loading template:', error);
-    showToast(t('importError') + error.message, 'error');
-  }
-}
+  var children = container.childNodes;
+  for (var i = 0; i < children.length; i++) {
+    var node = children[i];
 
-async function deleteTemplate() {
-  var select = document.getElementById('template-select');
-  if (!select) return;
+    // Check for explicit page break (hr with page-break-after or page-break-before)
+    if (node.nodeType === 1) { // Element node
+      var style = node.getAttribute('style') || '';
+      var tagName = node.tagName.toLowerCase();
 
-  var key = select.value;
-  if (!key) return;
-
-  // Find the template name
-  var options = await grist.widgetApi.getOptions();
-  var tableName = key.substring(9); // Remove 'template_' prefix
-  var nameKey = 'template_name_' + tableName;
-  var name = options[nameKey] || tableName;
-
-  // Confirm deletion
-  var confirmed = await showModal(
-    t('templateDeleteConfirm').replace('{name}', name),
-    '<div style="text-align:center;padding:20px;">' +
-    '<p style="margin-bottom:15px;">' + (currentLang === 'fr' ? 'Êtes-vous sûr de vouloir supprimer ce modèle ?' : 'Are you sure you want to delete this template?') + '</p>' +
-    '<div style="display:flex;gap:10px;justify-content:center;">' +
-    '<button id="modal-confirm" style="padding:8px 20px;background:#ef4444;color:white;border:none;border-radius:4px;cursor:pointer;">' + t('confirm') + '</button>' +
-    '<button id="modal-cancel" style="padding:8px 20px;background:#f1f5f9;border:none;border-radius:4px;cursor:pointer;">' + t('cancel') + '</button>' +
-    '</div>' +
-    '</div>'
-  );
-
-  if (!confirmed) return;
-
-  try {
-    // Delete both the template and its name
-    var newOptions = {};
-    newOptions[key] = null;
-    newOptions['template_name_' + tableName] = null;
-
-    await grist.widgetApi.setOptions(newOptions);
-    showToast(t('templateDeleted').replace('{name}', name), 'success');
-
-    // Refresh template list
-    await refreshTemplateList();
-    select.value = '';
-  } catch (error) {
-    console.error('Error deleting template:', error);
-    showToast(t('importError') + error.message, 'error');
-  }
-}
-
-function clearEditor() {
-  showModal(t('confirmClearTitle'), '<div style="text-align:center;padding:20px;">' +
-    '<p style="margin-bottom:15px;">' + t('confirmClear') + '</p>' +
-    '<div style="display:flex;gap:10px;justify-content:center;">' +
-    '<button id="modal-confirm" style="padding:8px 20px;background:#ef4444;color:white;border:none;border-radius:4px;cursor:pointer;">' + t('confirm') + '</button>' +
-    '<button id="modal-cancel" style="padding:8px 20px;background:#f1f5f9;border:none;border-radius:4px;cursor:pointer;">' + t('cancel') + '</button>' +
-    '</div>' +
-    '</div>').then(function(confirmed) {
-      if (confirmed) {
-        if (editorInstance) {
-          editorInstance.value = '';
-          templateHtml = '';
-          showToast(t('templateCleared'), 'info');
+      // Detect page break elements (manual markers, Word imports, hr with page-break)
+      var classList = node.className || '';
+      if (classList.indexOf('page-break-marker') !== -1 ||
+          style.indexOf('page-break-after') !== -1 ||
+          style.indexOf('page-break-before') !== -1 ||
+          (tagName === 'hr' && style.indexOf('page-break') !== -1)) {
+        // Push current accumulated content
+        if (currentHtml.trim()) {
+          sections.push({ html: currentHtml, isPageBreak: false });
+          currentHtml = '';
         }
+        sections.push({ html: '', isPageBreak: true });
+        hasExplicitPageBreak = true;
+        continue;
       }
-    });
+    }
+
+    // Accumulate ALL content (including tables) as one block
+    // This prevents unnecessary page breaks
+    if (node.nodeType === 1) {
+      currentHtml += node.outerHTML;
+    } else if (node.nodeType === 3 && node.textContent.trim()) {
+      currentHtml += node.textContent;
+    }
+  }
+
+  // Push remaining content
+  if (currentHtml.trim()) {
+    sections.push({ html: currentHtml, isPageBreak: false });
+  }
+
+  // If no sections were created, return the whole HTML as one section
+  if (sections.length === 0) {
+    sections.push({ html: html, isPageBreak: false });
+  }
+
+  return sections;
 }
 
 // =============================================================================
-// INITIALIZATION
+// HELP GUIDE
 // =============================================================================
 
-// Initialize when DOM is ready
-document.addEventListener('DOMContentLoaded', function() {
-  // Set up language buttons
-  document.querySelectorAll('.lang-btn').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-      setLang(btn.textContent.trim().toLowerCase());
-    });
-  });
-
-  // Set up tab switching
-  document.querySelectorAll('.tab-btn').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-      switchTab(btn.getAttribute('data-tab'));
-    });
-  });
-
-  // Set up table selection
-  document.getElementById('table-select').addEventListener('change', function() {
-    onTableChange();
-  });
-
-  // Set up preview navigation
-  document.getElementById('prev-record').addEventListener('click', prevRecord);
-  document.getElementById('next-record').addEventListener('click', nextRecord);
-
-  // Set up PDF generation
-  document.getElementById('pdf-generate-btn').addEventListener('click', generatePdf);
-  document.getElementById('pdf-cancel-btn').addEventListener('click', cancelPdf);
-  document.getElementById('pdf-single-btn').addEventListener('click', generateSinglePdf);
-
-  // Set up template management
-  document.getElementById('save-template-btn').addEventListener('click', saveTemplate);
-  document.getElementById('load-template-btn').addEventListener('click', loadTemplate);
-  document.getElementById('delete-template-btn').addEventListener('click', deleteTemplate);
-  document.getElementById('clear-editor-btn').addEventListener('click', clearEditor);
-
-  // Set up Word import
-  setupWordImport();
-
-  // Set up loop filter column change
-  document.getElementById('loop-filter-col').addEventListener('change', updateLoopValueOptions);
-  document.getElementById('edit-loop-filter-col').addEventListener('change', updateEditLoopValueOptions);
-
-  // Set up linked table selection
-  document.getElementById('loop-linked-table').addEventListener('change', updateLinkedTableColumns);
-  document.getElementById('edit-linked-table').addEventListener('change', updateEditLinkedTableColumns);
-
-  // Set up modal buttons
-  document.getElementById('modal-overlay').addEventListener('click', function() {
-    closeModal(false);
-  });
-  document.getElementById('modal-close').addEventListener('click', function() {
-    closeModal(false);
-  });
-
-  // Set up boolean format selector
-  var boolFormatSelect = document.getElementById('bool-format');
-  if (boolFormatSelect) {
-    boolFormatSelect.addEventListener('change', function() {
-      renderPreview();
-    });
+function openHelpGuide() {
+  var overlay = document.getElementById('help-guide-overlay');
+  var content = document.getElementById('help-guide-content');
+  
+  if (currentLang === 'fr') {
+    content.innerHTML = getHelpGuideFR();
+  } else {
+    content.innerHTML = getHelpGuideEN();
   }
+  
+  overlay.classList.remove('hidden');
+}
 
-  // Set up page format selector
-  var pageFormatSelect = document.getElementById('editor-page-format');
-  if (pageFormatSelect) {
-    pageFormatSelect.addEventListener('change', function() {
-      renderPreview();
-    });
-  }
+function closeHelpGuide(event) {
+  if (event && event.target !== document.getElementById('help-guide-overlay')) return;
+  document.getElementById('help-guide-overlay').classList.add('hidden');
+}
 
-  // Set up skip empty pages selector
-  var skipEmptySelect = document.getElementById('skip-empty-pages');
-  if (skipEmptySelect) {
-    skipEmptySelect.addEventListener('change', function() {
-      renderPreview();
-    });
-  }
+function getHelpGuideFR() {
+  return `
+    <style>
+      .help-section { margin-bottom: 20px; }
+      .help-section h4 { color: #7c3aed; margin-bottom: 8px; font-size: 14px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }
+      .help-table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 12px; }
+      .help-table th { background: #f1f5f9; text-align: left; padding: 8px; border: 1px solid #e2e8f0; }
+      .help-table td { padding: 8px; border: 1px solid #e2e8f0; }
+      .help-table code { background: #fef3c7; padding: 2px 6px; border-radius: 3px; font-family: monospace; }
+      .help-tip { background: #f0fdf4; border: 1px solid #86efac; border-radius: 6px; padding: 10px; margin: 10px 0; font-size: 12px; }
+      .help-tip strong { color: #166534; }
+    </style>
+    
+    <div class="help-section">
+      <h4>🚀 Démarrage rapide</h4>
+      <ol style="margin-left: 20px;">
+        <li>Sélectionnez une <strong>table source</strong> dans le menu déroulant</li>
+        <li>Créez votre document dans l'<strong>éditeur</strong> (ou importez un fichier Word)</li>
+        <li>Cliquez sur les <strong>variables</strong> pour les insérer dans le document</li>
+        <li>Allez dans <strong>Prévisualisation</strong> pour voir le résultat avec les vraies données</li>
+        <li>Allez dans <strong>Générer PDF</strong> pour exporter</li>
+      </ol>
+    </div>
+    
+    <div class="help-section">
+      <h4>📝 Variables simples</h4>
+      <table class="help-table">
+        <tr><th>Syntaxe</th><th>Description</th><th>Exemple</th></tr>
+        <tr><td><code>{{NomColonne}}</code></td><td>Affiche la valeur de la colonne</td><td><code>{{Nom}}</code> → "Martin"</td></tr>
+        <tr><td><code>{{Date}}</code></td><td>Les dates sont formatées automatiquement</td><td><code>{{DateCommande}}</code> → "15/02/2026"</td></tr>
+        <tr><td><code>{{Booleen}}</code></td><td>Affiché selon le format choisi (Oui/Non ou ☑/☐)</td><td><code>{{Actif}}</code> → "Oui"</td></tr>
+      </table>
+    </div>
+    
+    <div class="help-section">
+      <h4>🖼️ Images dynamiques</h4>
+      <table class="help-table">
+        <tr><th>Syntaxe</th><th>Description</th></tr>
+        <tr><td><code>{{IMG:NomColonne}}</code></td><td>Affiche une image depuis l'URL stockée dans la colonne</td></tr>
+        <tr><td><code>{{IMG:NomColonne:150}}</code></td><td>Affiche l'image avec une largeur de 150 pixels</td></tr>
+      </table>
+      <div class="help-tip">
+        <strong>💡 Formats supportés :</strong> URLs web (https://...), Attachments Grist, chemins relatifs avec URL de base (configurée dans les options PDF)
+      </div>
+    </div>
+    
+    <div class="help-section">
+      <h4>🔄 Boucles (répéter des données)</h4>
+      <table class="help-table">
+        <tr><th>Syntaxe</th><th>Description</th></tr>
+        <tr><td><code>{{#each}}...{{/each}}</code></td><td>Boucle sur toutes les lignes de la table</td></tr>
+        <tr><td><code>{{#each Colonne=Valeur}}...{{/each}}</code></td><td>Boucle filtrée (ex: <code>{{#each Statut=Actif}}</code>)</td></tr>
+        <tr><td><code>{{#each @Table.ColonneRef}}...{{/each}}</code></td><td>Boucle sur une table liée (ex: <code>{{#each @Commandes.Client}}</code>)</td></tr>
+      </table>
+      <div class="help-tip">
+        <strong>💡 Exemple de tableau avec boucle :</strong><br>
+        Créez un tableau, mettez <code>{{#each}}</code> dans la première cellule de la ligne de données, 
+        les variables <code>{{Colonne}}</code> dans les autres cellules, et <code>{{/each}}</code> dans la dernière cellule.
+      </div>
+    </div>
+    
+    <div class="help-section">
+      <h4>📊 Boutons de tableau</h4>
+      <table class="help-table">
+        <tr><th>Bouton</th><th>Fonction</th></tr>
+        <tr><td><strong>table</strong></td><td>Créer un tableau standard</td></tr>
+        <tr><td><strong>tablelayout</strong></td><td>Mise en page (2 colonnes, 3 colonnes, sidebar) pour disposer du contenu côte à côte</td></tr>
+        <tr><td><strong>nestedtable</strong></td><td>Insérer un tableau à l'intérieur d'une cellule</td></tr>
+        <tr><td><strong>tableborder</strong></td><td>Personnaliser les bordures de tout le tableau (couleur, épaisseur, visibilité)</td></tr>
+        <tr><td><strong>cellborder</strong></td><td>Personnaliser les bordures d'une cellule (couleur, épaisseur, côtés)</td></tr>
+        <tr><td><strong>columnwidth</strong></td><td>Définir une largeur fixe pour une colonne (en px ou %)</td></tr>
+      </table>
+    </div>
+    
+    <div class="help-section">
+      <h4>🎨 Boutons de formatage</h4>
+      <table class="help-table">
+        <tr><th>Bouton</th><th>Fonction</th></tr>
+        <tr><td><strong>verticaltext</strong></td><td>Orienter le texte verticalement dans une cellule</td></tr>
+        <tr><td><strong>pagebreak</strong></td><td>Insérer un saut de page pour le PDF</td></tr>
+        <tr><td><strong>insertparagraph</strong></td><td>Ajouter un paragraphe après un tableau (utile quand le curseur est bloqué)</td></tr>
+      </table>
+    </div>
+    
+    <div class="help-section">
+      <h4>📄 Génération PDF</h4>
+      <table class="help-table">
+        <tr><th>Option</th><th>Description</th></tr>
+        <tr><td><strong>Format</strong></td><td>A4 ou Letter</td></tr>
+        <tr><td><strong>Mode</strong></td><td>Un seul PDF avec tous les enregistrements, ou l'enregistrement actuel uniquement</td></tr>
+        <tr><td><strong>Nom du fichier</strong></td><td>Vous pouvez utiliser des variables : <code>Facture_{{Nom}}.pdf</code></td></tr>
+        <tr><td><strong>URL base images</strong></td><td>Pour les chemins relatifs (ex: photo.jpg → URL/photo.jpg)</td></tr>
+      </table>
+    </div>
+    
+    <div class="help-section">
+      <h4>💾 Sauvegarde</h4>
+      <p>Le modèle est automatiquement sauvegardé dans le stockage local du navigateur, par table. 
+      Vous pouvez aussi utiliser le bouton "Sauvegarder le modèle" pour forcer la sauvegarde.</p>
+    </div>
+  `;
+}
 
-  // Set up preview rulers toggle
-  var rulersToggle = document.getElementById('toggle-rulers');
-  if (rulersToggle) {
-    rulersToggle.addEventListener('change', function() {
-      showPreviewRulers = this.checked;
-      if (this.checked) {
-        setTimeout(positionPreviewRulers, 50);
+// =============================================================================
+// STICKY TOOLBAR
+// =============================================================================
+
+function initStickyToolbar() {
+  // Wait for Jodit to be initialized
+  setTimeout(function() {
+    var toolbar = document.querySelector('.jodit-toolbar__box');
+    if (!toolbar) return;
+    
+    var toolbarHeight = toolbar.offsetHeight;
+    
+    // Create placeholder to prevent content jump
+    var placeholder = document.createElement('div');
+    placeholder.className = 'toolbar-placeholder';
+    placeholder.style.height = toolbarHeight + 'px';
+    toolbar.parentNode.insertBefore(placeholder, toolbar);
+    
+    // Store initial toolbar offset from document top
+    var initialToolbarOffsetTop = placeholder.offsetTop;
+    
+    function handleScroll() {
+      var editorTab = document.querySelector('[data-tab="editor"]');
+      var isEditorActive = editorTab && editorTab.classList.contains('active');
+      
+      if (!isEditorActive) {
+        toolbar.classList.remove('toolbar-fixed');
+        placeholder.classList.remove('active');
+        return;
+      }
+      
+      // Get tabs element to know where to fix toolbar
+      var tabs = document.querySelector('.tabs');
+      var tabsBottom = tabs ? tabs.getBoundingClientRect().bottom : 40;
+      
+      // Check if placeholder top has scrolled above tabs bottom
+      var placeholderTop = placeholder.getBoundingClientRect().top;
+      
+      if (placeholderTop <= tabsBottom) {
+        toolbar.classList.add('toolbar-fixed');
+        toolbar.style.top = tabsBottom + 'px';
+        placeholder.classList.add('active');
       } else {
-        var rulers = document.querySelectorAll('.preview-ruler');
-        rulers.forEach(function(ruler) {
-          ruler.style.display = 'none';
-        });
+        toolbar.classList.remove('toolbar-fixed');
+        toolbar.style.top = '';
+        placeholder.classList.remove('active');
       }
-    });
-  }
+    }
+    
+    window.addEventListener('scroll', handleScroll);
+    handleScroll(); // Initial check
+  }, 500);
+}
 
-  // Set up page size selector
-  var pageSizeSelect = document.getElementById('pdf-page-size');
-  if (pageSizeSelect) {
-    pageSizeSelect.addEventListener('change', function() {
-      // Update preview to match
-      var previewWrapper = document.getElementById('preview-pages-wrapper');
-      if (previewWrapper) {
-        previewWrapper.className = 'preview-pages-wrapper';
-        if (this.value === 'a4') {
-          previewWrapper.classList.add('preview-format-a4');
-        } else if (this.value === 'letter') {
-          previewWrapper.classList.add('preview-format-letter');
-        }
-      }
-    });
-  }
+// =============================================================================
+// RULERS
+// =============================================================================
 
-  // Set up image base URL
-  var imageBaseUrlInput = document.getElementById('image-base-url');
-  if (imageBaseUrlInput) {
-    imageBaseUrlInput.addEventListener('change', function() {
-      renderPreview();
-    });
+var showRulers = false;
+
+function toggleRulers() {
+  showRulers = !showRulers;
+  var btn = document.getElementById('ruler-toggle-btn');
+  var rulerH = document.getElementById('ruler-h');
+  var rulerV = document.getElementById('ruler-v');
+  var rulerCorner = document.getElementById('ruler-corner');
+  
+  if (btn) btn.classList.toggle('active', showRulers);
+  if (rulerH) rulerH.classList.toggle('show', showRulers);
+  if (rulerV) rulerV.classList.toggle('show', showRulers);
+  if (rulerCorner) rulerCorner.classList.toggle('show', showRulers);
+  
+  if (showRulers) {
+    positionRulers();
   }
+}
+
+function positionRulers() {
+  var rulerH = document.getElementById('ruler-h');
+  var rulerV = document.getElementById('ruler-v');
+  var rulerCorner = document.getElementById('ruler-corner');
+  var rulerHMarks = document.getElementById('ruler-h-marks');
+  var rulerVMarks = document.getElementById('ruler-v-marks');
+  var workplace = document.querySelector('.jodit-workplace');
+  var editorWrapper = document.querySelector('.editor-wrapper');
+  
+  if (!rulerH || !rulerV || !rulerCorner || !workplace || !editorWrapper) return;
+  
+  // Get workplace position relative to editor-wrapper (the positioned ancestor)
+  var wpRect = workplace.getBoundingClientRect();
+  var ewRect = editorWrapper.getBoundingClientRect();
+  
+  var wpLeft = wpRect.left - ewRect.left;
+  var wpTop = wpRect.top - ewRect.top;
+  var wpWidth = workplace.offsetWidth;
+  var wpHeight = workplace.offsetHeight;
+  
+  var rulerH_height = 20;
+  var rulerV_width = 25;
+  
+  // Place horizontal ruler just above .jodit-workplace
+  rulerH.style.left = wpLeft + 'px';
+  rulerH.style.top = (wpTop - rulerH_height) + 'px';
+  rulerH.style.width = wpWidth + 'px';
+  
+  // A4: 210mm x 297mm - use same scale for both axes
+  var pxPerCm = wpWidth / 21.0;
+  var a4HeightPx = Math.round(pxPerCm * 29.7); // exact A4 height based on scale
+  
+  // Place vertical ruler to the left of .jodit-workplace (limited to A4 height)
+  rulerV.style.left = (wpLeft - rulerV_width) + 'px';
+  rulerV.style.top = wpTop + 'px';
+  rulerV.style.height = a4HeightPx + 'px';
+  
+  // Place corner
+  rulerCorner.style.left = (wpLeft - rulerV_width) + 'px';
+  rulerCorner.style.top = (wpTop - rulerH_height) + 'px';
+  
+  // Horizontal ruler marks (0 to 21 cm)
+  var hHtml = '';
+  for (var i = 0; i <= 21; i++) {
+    var pos = i * pxPerCm;
+    var cls = (i % 10 === 0) ? 'cm10' : (i % 5 === 0) ? 'cm5' : '';
+    hHtml += '<div class="ruler-mark ' + cls + '" style="left: ' + pos + 'px;">' + i + '</div>';
+  }
+  rulerHMarks.innerHTML = hHtml;
+  
+  // Vertical ruler marks (0 to 29.7 cm = 30 marks)
+  var vHtml = '';
+  for (var i = 0; i <= 30; i++) {
+    var pos = i * pxPerCm;
+    var cls = (i % 10 === 0) ? 'cm10' : (i % 5 === 0) ? 'cm5' : '';
+    vHtml += '<div class="ruler-mark ' + cls + '" style="top: ' + pos + 'px;">' + i + '</div>';
+  }
+  rulerVMarks.innerHTML = vHtml;
+}
+
+// Update rulers on resize and scroll
+window.addEventListener('resize', function() {
+  if (showRulers) positionRulers();
+  if (showPreviewRulers) positionPreviewRulers();
 });
 
 // =============================================================================
@@ -4883,79 +4723,217 @@ document.addEventListener('DOMContentLoaded', function() {
 
 var showPreviewRulers = false;
 
+function togglePreviewRulers() {
+  showPreviewRulers = !showPreviewRulers;
+  var btn = document.getElementById('preview-ruler-toggle-btn');
+  var rulerH = document.getElementById('preview-ruler-h');
+  var rulerV = document.getElementById('preview-ruler-v');
+  var rulerCorner = document.getElementById('preview-ruler-corner');
+  
+  console.log('togglePreviewRulers:', showPreviewRulers, rulerH, rulerV, rulerCorner);
+  
+  if (btn) btn.classList.toggle('active', showPreviewRulers);
+  
+  var disp = showPreviewRulers ? 'block' : 'none';
+  if (rulerH) { rulerH.style.display = disp; rulerH.style.position = 'absolute'; rulerH.style.zIndex = '5'; }
+  if (rulerV) { rulerV.style.display = disp; rulerV.style.position = 'absolute'; rulerV.style.zIndex = '5'; }
+  if (rulerCorner) { rulerCorner.style.display = disp; rulerCorner.style.position = 'absolute'; rulerCorner.style.zIndex = '5'; }
+  
+  if (showPreviewRulers) {
+    setTimeout(positionPreviewRulers, 100);
+  }
+}
+
 function positionPreviewRulers() {
-  if (!showPreviewRulers) return;
-
+  var rulerH = document.getElementById('preview-ruler-h');
+  var rulerV = document.getElementById('preview-ruler-v');
+  var rulerCorner = document.getElementById('preview-ruler-corner');
+  var rulerHMarks = document.getElementById('preview-ruler-h-marks');
+  var rulerVMarks = document.getElementById('preview-ruler-v-marks');
+  var previewPage = document.querySelector('#preview-pages-wrapper .preview-page');
   var wrapper = document.getElementById('preview-pages-wrapper');
-  if (!wrapper) return;
-
-  var pages = wrapper.querySelectorAll('.preview-page');
-  if (pages.length === 0) return;
-
-  var firstPage = pages[0];
-  var rect = firstPage.getBoundingClientRect();
+  
+  console.log('positionPreviewRulers - page:', previewPage, 'wrapper:', wrapper);
+  if (!rulerH || !rulerV || !rulerCorner || !previewPage || !wrapper) {
+    console.log('Missing elements:', !rulerH, !rulerV, !rulerCorner, !previewPage, !wrapper);
+    return;
+  }
+  
+  // Get preview-page position relative to wrapper
+  var pageRect = previewPage.getBoundingClientRect();
   var wrapperRect = wrapper.getBoundingClientRect();
-
-  // Position horizontal ruler
-  var hRuler = document.getElementById('preview-ruler-horizontal');
-  if (!hRuler) {
-    hRuler = document.createElement('div');
-    hRuler.id = 'preview-ruler-horizontal';
-    hRuler.className = 'preview-ruler';
-    document.body.appendChild(hRuler);
+  
+  // Account for wrapper scroll
+  var pageLeft = pageRect.left - wrapperRect.left + wrapper.scrollLeft;
+  var pageTop = pageRect.top - wrapperRect.top + wrapper.scrollTop;
+  var pageWidth = previewPage.offsetWidth;
+  var pageHeight = previewPage.offsetHeight;
+  
+  console.log('Preview ruler positions - left:', pageLeft, 'top:', pageTop, 'w:', pageWidth, 'h:', pageHeight);
+  
+  var rulerH_height = 20;
+  var rulerV_width = 25;
+  
+  // Place horizontal ruler just above the preview page
+  rulerH.style.left = pageLeft + 'px';
+  rulerH.style.top = (pageTop - rulerH_height) + 'px';
+  rulerH.style.width = pageWidth + 'px';
+  rulerH.style.background = '#f8fafc';
+  
+  // A4: 210mm x 297mm - use same scale for both axes
+  var pxPerCm = pageWidth / 21.0;
+  var a4HeightPx = Math.round(pxPerCm * 29.7); // exact A4 height based on scale
+  
+  // Place vertical ruler to the left of the preview page (limited to A4 height)
+  rulerV.style.left = (pageLeft - rulerV_width) + 'px';
+  rulerV.style.top = pageTop + 'px';
+  rulerV.style.height = a4HeightPx + 'px';
+  rulerV.style.background = '#f8fafc';
+  
+  // Place corner
+  rulerCorner.style.left = (pageLeft - rulerV_width) + 'px';
+  rulerCorner.style.top = (pageTop - rulerH_height) + 'px';
+  rulerCorner.style.background = '#e2e8f0';
+  
+  // Horizontal ruler marks (0 to 21 cm)
+  var hHtml = '';
+  for (var i = 0; i <= 21; i++) {
+    var pos = i * pxPerCm;
+    var cls = (i % 10 === 0) ? 'cm10' : (i % 5 === 0) ? 'cm5' : '';
+    hHtml += '<div class="ruler-mark ' + cls + '" style="left: ' + pos + 'px;">' + i + '</div>';
   }
-  hRuler.style.display = 'block';
-  hRuler.style.left = (wrapperRect.left) + 'px';
-  hRuler.style.top = (rect.top - 20) + 'px';
-  hRuler.style.width = (wrapperRect.width) + 'px';
-
-  // Position vertical ruler
-  var vRuler = document.getElementById('preview-ruler-vertical');
-  if (!vRuler) {
-    vRuler = document.createElement('div');
-    vRuler.id = 'preview-ruler-vertical';
-    vRuler.className = 'preview-ruler';
-    document.body.appendChild(vRuler);
+  rulerHMarks.innerHTML = hHtml;
+  
+  // Vertical ruler marks (0 to 30 cm, A4 = 29.7cm)
+  var vHtml = '';
+  for (var i = 0; i <= 30; i++) {
+    var pos = i * pxPerCm;
+    var cls = (i % 10 === 0) ? 'cm10' : (i % 5 === 0) ? 'cm5' : '';
+    vHtml += '<div class="ruler-mark ' + cls + '" style="top: ' + pos + 'px;">' + i + '</div>';
   }
-  vRuler.style.display = 'block';
-  vRuler.style.left = (rect.left - 20) + 'px';
-  vRuler.style.top = (wrapperRect.top) + 'px';
-  vRuler.style.height = (wrapperRect.height) + 'px';
+  rulerVMarks.innerHTML = vHtml;
 }
 
 // =============================================================================
-// GLOBAL VARIABLES
+// TEMPLATE PANEL TOGGLE
 // =============================================================================
 
-var gristServerUrl = null;
-var gristDocId = null;
-
-// Try to detect Grist server URL and doc ID
-try {
-  if (window.location.href.indexOf('/doc/') > 0) {
-    var parts = window.location.href.split('/doc/');
-    if (parts.length > 1) {
-      var docPart = parts[1].split('/')[0];
-      gristDocId = docPart;
-      gristServerUrl = parts[0];
-    }
+function toggleTemplatePanel() {
+  var panel = document.getElementById('template-manager-panel');
+  var icon = document.getElementById('template-toggle-icon');
+  
+  if (panel.classList.contains('collapsed')) {
+    panel.classList.remove('collapsed');
+    icon.classList.remove('collapsed');
+    // Adjust padding-bottom of editor
+    document.querySelector('#tab-editor .main').style.paddingBottom = '130px';
+  } else {
+    panel.classList.add('collapsed');
+    icon.classList.add('collapsed');
+    // Reduce padding-bottom when collapsed
+    document.querySelector('#tab-editor .main').style.paddingBottom = '60px';
   }
-} catch (e) {
-  console.warn('Could not detect Grist server URL:', e);
 }
 
-// =============================================================================
-// EXPORT FOR TESTING
-// =============================================================================
-
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = {
-    resolveTemplate: resolveTemplate,
-    processLoops: processLoops,
-    executeLoop: executeLoop,
-    formatValueForDisplay: formatValueForDisplay,
-    normalizeForComparison: normalizeForComparison,
-    escapeRegex: escapeRegex
-  };
-}
+function getHelpGuideEN() {
+  return `
+    <style>
+      .help-section { margin-bottom: 20px; }
+      .help-section h4 { color: #7c3aed; margin-bottom: 8px; font-size: 14px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }
+      .help-table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 12px; }
+      .help-table th { background: #f1f5f9; text-align: left; padding: 8px; border: 1px solid #e2e8f0; }
+      .help-table td { padding: 8px; border: 1px solid #e2e8f0; }
+      .help-table code { background: #fef3c7; padding: 2px 6px; border-radius: 3px; font-family: monospace; }
+      .help-tip { background: #f0fdf4; border: 1px solid #86efac; border-radius: 6px; padding: 10px; margin: 10px 0; font-size: 12px; }
+      .help-tip strong { color: #166534; }
+    </style>
+    
+    <div class="help-section">
+      <h4>🚀 Quick Start</h4>
+      <ol style="margin-left: 20px;">
+        <li>Select a <strong>source table</strong> from the dropdown</li>
+        <li>Create your document in the <strong>editor</strong> (or import a Word file)</li>
+        <li>Click on <strong>variables</strong> to insert them into the document</li>
+        <li>Go to <strong>Preview</strong> to see the result with real data</li>
+        <li>Go to <strong>Generate PDF</strong> to export</li>
+      </ol>
+    </div>
+    
+    <div class="help-section">
+      <h4>📝 Simple Variables</h4>
+      <table class="help-table">
+        <tr><th>Syntax</th><th>Description</th><th>Example</th></tr>
+        <tr><td><code>{{ColumnName}}</code></td><td>Display the column value</td><td><code>{{Name}}</code> → "Martin"</td></tr>
+        <tr><td><code>{{Date}}</code></td><td>Dates are automatically formatted</td><td><code>{{OrderDate}}</code> → "02/15/2026"</td></tr>
+        <tr><td><code>{{Boolean}}</code></td><td>Displayed according to chosen format (Yes/No or ☑/☐)</td><td><code>{{Active}}</code> → "Yes"</td></tr>
+      </table>
+    </div>
+    
+    <div class="help-section">
+      <h4>🖼️ Dynamic Images</h4>
+      <table class="help-table">
+        <tr><th>Syntax</th><th>Description</th></tr>
+        <tr><td><code>{{IMG:ColumnName}}</code></td><td>Display an image from the URL stored in the column</td></tr>
+        <tr><td><code>{{IMG:ColumnName:150}}</code></td><td>Display the image with a width of 150 pixels</td></tr>
+      </table>
+      <div class="help-tip">
+        <strong>💡 Supported formats:</strong> Web URLs (https://...), Grist Attachments, relative paths with base URL (configured in PDF options)
+      </div>
+    </div>
+    
+    <div class="help-section">
+      <h4>🔄 Loops (repeat data)</h4>
+      <table class="help-table">
+        <tr><th>Syntax</th><th>Description</th></tr>
+        <tr><td><code>{{#each}}...{{/each}}</code></td><td>Loop over all rows in the table</td></tr>
+        <tr><td><code>{{#each Column=Value}}...{{/each}}</code></td><td>Filtered loop (e.g., <code>{{#each Status=Active}}</code>)</td></tr>
+        <tr><td><code>{{#each @Table.RefColumn}}...{{/each}}</code></td><td>Loop on a linked table (e.g., <code>{{#each @Orders.Customer}}</code>)</td></tr>
+      </table>
+      <div class="help-tip">
+        <strong>💡 Table with loop example:</strong><br>
+        Create a table, put <code>{{#each}}</code> in the first cell of the data row, 
+        variables <code>{{Column}}</code> in other cells, and <code>{{/each}}</code> in the last cell.
+      </div>
+    </div>
+    
+    <div class="help-section">
+      <h4>📊 Table Buttons</h4>
+      <table class="help-table">
+        <tr><th>Button</th><th>Function</th></tr>
+        <tr><td><strong>table</strong></td><td>Create a standard table</td></tr>
+        <tr><td><strong>tablelayout</strong></td><td>Layout (2 columns, 3 columns, sidebar) to arrange content side by side</td></tr>
+        <tr><td><strong>nestedtable</strong></td><td>Insert a table inside a cell</td></tr>
+        <tr><td><strong>tableborder</strong></td><td>Customize borders for the entire table (color, thickness, visibility)</td></tr>
+        <tr><td><strong>cellborder</strong></td><td>Customize borders for a cell (color, thickness, sides)</td></tr>
+        <tr><td><strong>columnwidth</strong></td><td>Set a fixed width for a column (in px or %)</td></tr>
+      </table>
+    </div>
+    
+    <div class="help-section">
+      <h4>🎨 Formatting Buttons</h4>
+      <table class="help-table">
+        <tr><th>Button</th><th>Function</th></tr>
+        <tr><td><strong>verticaltext</strong></td><td>Orient text vertically in a cell</td></tr>
+        <tr><td><strong>pagebreak</strong></td><td>Insert a page break for PDF</td></tr>
+        <tr><td><strong>insertparagraph</strong></td><td>Add a paragraph after a table (useful when cursor is stuck)</td></tr>
+      </table>
+    </div>
+    
+    <div class="help-section">
+      <h4>📄 PDF Generation</h4>
+      <table class="help-table">
+        <tr><th>Option</th><th>Description</th></tr>
+        <tr><td><strong>Format</strong></td><td>A4 or Letter</td></tr>
+        <tr><td><strong>Mode</strong></td><td>Single PDF with all records, or current record only</td></tr>
+        <tr><td><strong>Filename</strong></td><td>You can use variables: <code>Invoice_{{Name}}.pdf</code></td></tr>
+        <tr><td><strong>Image base URL</strong></td><td>For relative paths (e.g., photo.jpg → URL/photo.jpg)</td></tr>
+      </table>
+    </div>
+    
+    <div class="help-section">
+      <h4>💾 Saving</h4>
+      <p>The template is automatically saved in the browser's local storage, per table. 
+      You can also use the "Save template" button to force save.</p>
+    </div>
+  `;
 }

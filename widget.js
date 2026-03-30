@@ -166,19 +166,8 @@ function setLang(lang) {
   });
 }
 
-// =============================================================================
-// UTILS
-// =============================================================================
+/
 
-function sanitize(str) {
-  var div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
-}
-
-function isInsideGrist() {
-  try { return window.self !== window.top; } catch (e) { return true; }
-}
 
 // =============================================================================
 // TOAST & MODAL
@@ -227,6 +216,43 @@ var editorInstance = null;
 var TEMPLATE_STORAGE_KEY = 'grist_doc_template_';
 var pdfCancelled = false;
 
+/ =============================================================================
+// UTILS
+// =============================================================================
+
+function sanitize(str) {
+  var div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function isInsideGrist() {
+  try { return window.self !== window.top; } catch (e) { return true; }
+}
+function getEditorHtml() {
+  return editorInstance ? editorInstance.getEditorValue() : '';
+}
+
+function setEditorHtml(html) {
+  if (editorInstance) {
+    editorInstance.setEditorValue(html);
+    templateHtml = html;
+  }
+}
+
+function loadSavedTemplate() {
+  if (!selectedTable) return;
+
+  // Try to load from Grist options
+  grist.widgetApi.getOptions().then(function(options) {
+    if (options && options['template_' + selectedTable]) {
+      setEditorHtml(options['template_' + selectedTable]);
+      templateHtml = options['template_' + selectedTable];
+    }
+  }).catch(function(error) {
+    console.warn('Could not load saved template:', error);
+  });
+}
 // =============================================================================
 // TABS
 // =============================================================================
@@ -267,60 +293,102 @@ if (!isInsideGrist()) {
   document.getElementById('main-content').classList.add('hidden');
 } else {
   (async function init() {
-    try {
-      await grist.ready({ requiredAccess: 'full' });
-      console.log('Doc Template widget ready');
+  try {
+    await grist.ready({ requiredAccess: 'full' });
+    console.log('Doc Template widget ready');
 
-      // Initialize editor FIRST so it's ready when we load templates
-      initEditor();
+    // Définir refreshTemplateList avant de l'utiliser
+    async function refreshTemplateList() {
+      var select = document.getElementById('template-select');
+      if (!select) return;
 
-      // Show fixed bars for editor tab (default tab)
-      var fixedVarBar = document.getElementById('fixed-var-bar');
-      var fixedBottomBar = document.querySelector('.fixed-bottom-bar');
-      if (fixedVarBar) fixedVarBar.style.display = 'block';
-      if (fixedBottomBar) fixedBottomBar.style.display = 'block';
-
-      // Restore draft immediately after editor init
       try {
-        var draft = await grist.widgetApi.getOption('editorDraft');
-        console.log('Draft from options:', draft ? draft.substring(0, 50) + '...' : 'null');
-        if (draft && editorInstance) {
-          setEditorHtml(draft);
-          templateHtml = draft;
-          console.log('Draft restored at startup');
-        }
-      } catch (e) {
-        console.warn('Could not restore draft:', e);
-      }
+        var options = await grist.widgetApi.getOptions();
+        var templates = [];
 
-      // Listen for widget options (template stored in Grist)
-      grist.onOptions(function(options) {
-        if (options && options.template && selectedTable) {
-          var key = 'template_' + selectedTable;
-          if (options[key]) {
-            setEditorHtml(options[key]);
-            templateHtml = options[key];
-            console.log('Template loaded from Grist options for', selectedTable);
+        // Trouver toutes les clés template_*
+        for (var key in options) {
+          if (key.startsWith('template_')) {
+            var tableName = key.substring(9); // Supprimer le préfixe 'template_'
+            var nameKey = 'template_name_' + tableName;
+            var name = options[nameKey] || tableName;
+            templates.push({
+              table: tableName,
+              name: name,
+              key: key
+            });
           }
         }
-      });
 
-      // Listen for filtered records from "Select By" configuration
-      grist.onRecords(function(records) {
-        console.log('Received filtered records from Select By:', records.length);
-        filteredRecords = records || [];
-      });
+        // Trier par nom
+        templates.sort(function(a, b) {
+          return a.name.localeCompare(b.name);
+        });
 
-      // Load tables and restore selection
-      await loadTables();
+        // Remplir le sélecteur
+        select.innerHTML = '<option value="">' + t('templateSelectDefault') + '</option>';
+        for (var i = 0; i < templates.length; i++) {
+          var opt = document.createElement('option');
+          opt.value = templates[i].key;
+          opt.textContent = templates[i].name + ' (' + templates[i].table + ')';
+          select.appendChild(opt);
+        }
 
-      // Load saved templates list
-      await refreshTemplateList();
-      console.log('Template list refreshed at startup');
-    } catch (error) {
-      console.error('Init error:', error);
+      } catch (error) {
+        console.error('Error refreshing template list:', error);
+      }
     }
-  })();
+
+    // Initialiser l'éditeur EN PREMIER pour qu'il soit prêt lorsque nous chargeons les modèles
+    initEditor();
+
+    // Afficher les barres fixes pour l'onglet de l'éditeur (onglet par défaut)
+    var fixedVarBar = document.getElementById('fixed-var-bar');
+    var fixedBottomBar = document.querySelector('.fixed-bottom-bar');
+    if (fixedVarBar) fixedVarBar.style.display = 'block';
+    if (fixedBottomBar) fixedBottomBar.style.display = 'block';
+
+    // Restaurer le brouillon immédiatement après l'initialisation de l'éditeur
+    try {
+      var draft = await grist.widgetApi.getOption('editorDraft');
+      console.log('Draft from options:', draft ? draft.substring(0, 50) + '...' : 'null');
+      if (draft && editorInstance) {
+        setEditorHtml(draft);
+        templateHtml = draft;
+        console.log('Draft restored at startup');
+      }
+    } catch (e) {
+      console.warn('Could not restore draft:', e);
+    }
+
+    // Écouter les options du widget (modèle stocké dans Grist)
+    grist.onOptions(function(options) {
+      if (options && options.template && selectedTable) {
+        var key = 'template_' + selectedTable;
+        if (options[key]) {
+          setEditorHtml(options[key]);
+          templateHtml = options[key];
+          console.log('Template loaded from Grist options for', selectedTable);
+        }
+      }
+    });
+
+    // Écouter les enregistrements filtrés depuis la configuration "Select By"
+    grist.onRecords(function(records) {
+      console.log('Received filtered records from Select By:', records.length);
+      filteredRecords = records || [];
+    });
+
+    // Charger les tables et restaurer la sélection
+    await loadTables();
+
+    // Charger la liste des modèles sauvegardés
+    await refreshTemplateList();
+    console.log('Template list refreshed at startup');
+  } catch (error) {
+    console.error('Init error:', error);
+  }
+})();
 }
 
 // =============================================================================
@@ -4613,35 +4681,6 @@ function clearEditor() {
         }
       }
     });
-}
-
-// =============================================================================
-// UTILS
-// =============================================================================
-
-function getEditorHtml() {
-  return editorInstance ? editorInstance.getEditorValue() : '';
-}
-
-function setEditorHtml(html) {
-  if (editorInstance) {
-    editorInstance.setEditorValue(html);
-    templateHtml = html;
-  }
-}
-
-function loadSavedTemplate() {
-  if (!selectedTable) return;
-
-  // Try to load from Grist options
-  grist.widgetApi.getOptions().then(function(options) {
-    if (options && options['template_' + selectedTable]) {
-      setEditorHtml(options['template_' + selectedTable]);
-      templateHtml = options['template_' + selectedTable];
-    }
-  }).catch(function(error) {
-    console.warn('Could not load saved template:', error);
-  });
 }
 
 // =============================================================================

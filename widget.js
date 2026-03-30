@@ -1185,7 +1185,7 @@ function insertTableWithLoop() {
     });
 
     var loopInstruction = '';
-
+    // --- SWITCH LOOP TYPE ---
     // --- SWITCH LOOP TYPE ---
     if (loopType === 'view') {
       loopInstruction = 'LOOP:*';
@@ -1232,6 +1232,7 @@ function insertTableWithLoop() {
       });
     });
   }
+
 
   else if (mode === 'aligned') {
 

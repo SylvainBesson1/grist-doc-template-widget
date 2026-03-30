@@ -1080,134 +1080,10 @@ function updateEditLoopValueOptions() {
     valSelect.appendChild(opt);
   }
 }
-function insertTableWithLoop() {
-  if (!editorInstance) return;
+function renderLoopCell(currentRecord, templateRowHtml, loopInstruction) {
+  if (!loopInstruction.startsWith('LOOP:CELL:')) return templateRowHtml;
 
-  restoreEditorSelection();
-
-  // --- Colonnes disponibles ---
-  var colOptions = '';
-  for (var i = 0; i < tableColumns.length; i++) {
-    colOptions += '<option value="' + tableColumns[i] + '">' + tableColumns[i] + '</option>';
-  }
-
-  // --- Vues disponibles ---
-  var viewOptions = '<option value="">' + (currentLang === 'fr' ? '-- Choisir une vue --' : '-- Choose a view --') + '</option>';
-  for (var v = 0; v < availableViews.length; v++) {
-    viewOptions += '<option value="' + availableViews[v].id + '">' + availableViews[v].name + '</option>';
-  }
-
-  // --- Tables disponibles ---
-  var tableOptions = '<option value="">' + (currentLang === 'fr' ? '-- Choisir une table --' : '-- Choose a table --') + '</option>';
-  for (var t = 0; t < allTables.length; t++) {
-    if (allTables[t] !== selectedTable) {
-      tableOptions += '<option value="' + allTables[t] + '">' + allTables[t] + '</option>';
-    }
-  }
-
-  // --- UI ---
-  var formHtml = '<div style="text-align:left;">' +
-
-    '<label><input type="radio" name="loop-type" value="view" checked> View</label><br>' +
-    '<label><input type="radio" name="loop-type" value="viewselect"> View (filtered)</label><br>' +
-    '<label><input type="radio" name="loop-type" value="linkedtable"> Linked table</label><br>' +
-    '<label><input type="radio" name="loop-type" value="filter"> Filter</label><br>' +
-    '<label><input type="radio" name="loop-type" value="cellloop"> Loop on cell lists</label>' +
-
-    '<div id="view-select-options" style="display:none;margin-top:10px;">' +
-    '<select id="loop-view-select">' + viewOptions + '</select>' +
-    '</div>' +
-
-    '<div id="linked-table-options" style="display:none;margin-top:10px;">' +
-    '<select id="loop-linked-table">' + tableOptions + '</select>' +
-    '<select id="loop-linked-ref-col"></select>' +
-    '</div>' +
-
-    '<div id="filter-options" style="display:none;margin-top:10px;">' +
-    '<select id="loop-filter-col" onchange="updateLoopValueOptions()">' + colOptions + '</select>' +
-    '<select id="loop-filter-val-select"></select>' +
-    '<input type="text" id="loop-filter-val">' +
-    '</div>' +
-
-    '<div style="margin-top:10px;">' +
-    '<strong>' + (currentLang === 'fr' ? 'Colonnes :' : 'Columns:') + '</strong>' +
-    '<div id="loop-cols-checkboxes">';
-  
-  for (var j = 0; j < tableColumns.length; j++) {
-    formHtml += '<label>' +
-      '<input type="checkbox" value="' + tableColumns[j] + '" checked> ' +
-      tableColumns[j] +
-      '</label><br>';
-  }
-
-  formHtml += '</div></div></div>';
-
-  // --- Init UI ---
-  setTimeout(function () {
-    updateLoopValueOptions();
-
-    var radios = document.querySelectorAll('input[name="loop-type"]');
-    radios.forEach(function (radio) {
-      radio.addEventListener('change', function () {
-        document.getElementById('filter-options').style.display =
-          this.value === 'filter' ? 'block' : 'none';
-
-        document.getElementById('view-select-options').style.display =
-          this.value === 'viewselect' ? 'block' : 'none';
-
-        document.getElementById('linked-table-options').style.display =
-          this.value === 'linkedtable' ? 'block' : 'none';
-      });
-    });
-  }, 100);
-
-  // --- Modal ---
-  showModal('📊 Table with loop', formHtml).then(function (confirmed) {
-    if (!confirmed) return;
-
-    var loopType = document.querySelector('input[name="loop-type"]:checked').value;
-
-    var selectedCols = [];
-    document.querySelectorAll('#loop-cols-checkboxes input:checked')
-      .forEach(cb => selectedCols.push(cb.value));
-
-    if (selectedCols.length === 0) {
-      selectedCols = tableColumns.slice(0, 3);
-    }
-
-    // --- Header + row template ---
-    var headerCells = '';
-    var dataCells = '';
-
-    selectedCols.forEach(function (col) {
-      headerCells += '<th>' + col + '</th>';
-      dataCells += '<td>{{' + col + '}}</td>';
-    });
-
-    var loopInstruction = '';
-    // --- SWITCH LOOP TYPE ---
-    // --- SWITCH LOOP TYPE ---
-    if (loopType === 'view') {
-      loopInstruction = 'LOOP:*';
-
-    } else if (loopType === 'viewselect') {
-      var viewId = document.getElementById('loop-view-select').value;
-      loopInstruction = 'LOOP:VIEW:' + viewId;
-
-    } else if (loopType === 'linkedtable') {
-      var table = document.getElementById('loop-linked-table').value;
-      var ref = document.getElementById('loop-linked-ref-col').value;
-      loopInstruction = 'LOOP:TABLE:' + table + ':' + ref;
-
-    } else if (loopType === 'filter') {
-      var col = document.getElementById('loop-filter-col').value;
-      var val =
-        document.getElementById('loop-filter-val-select').value ||
-        document.getElementById('loop-filter-val').value;
-      loopInstruction = 'LOOP:' + col + '=' + val;
-
-    } else if (loopInstruction.startsWith('LOOP:CELL:')) {
-
+  // Récupérer la configuration
   var config = loopInstruction.replace('LOOP:CELL:', '');
   var modeMatch = config.match(/mode=(\w+)/);
   var mode = modeMatch ? modeMatch[1] : 'vertical';
@@ -1216,14 +1092,24 @@ function insertTableWithLoop() {
 
   var newHtml = '';
 
+  // Normaliser les valeurs multi-références / JSON / chaînes
+  function normalizeList(raw) {
+    if (!raw) return [];
+    if (Array.isArray(raw)) return raw;
+    if (typeof raw === 'string') {
+      try {
+        var parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
+      } catch(e) {}
+      return raw.split(',').map(s => s.trim()).filter(Boolean);
+    }
+    return [raw];
+  }
+
   if (mode === 'vertical') {
+    // Une colonne à la fois, chaque valeur = une ligne
     cols.forEach(function(col) {
-      var listRaw = currentRecord[col] || [];
-      var list = [];
-
-      if (Array.isArray(listRaw)) list = listRaw;
-      else if (typeof listRaw === 'string') list = listRaw.split(',').map(s => s.trim()).filter(Boolean);
-
+      var list = normalizeList(currentRecord[col]);
       list.forEach(function(item) {
         var value = (item && typeof item === 'object') ? (item.Name || item.label || item.id || '') : (item || '');
         var rowHtml = templateRowHtml;
@@ -1231,20 +1117,12 @@ function insertTableWithLoop() {
         newHtml += rowHtml;
       });
     });
-  }
-
-
-  else if (mode === 'aligned') {
-
+  } else if (mode === 'aligned') {
+    // Colonnes parallèles, aligner les valeurs par index
     var lists = cols.map(function(col) {
-      var listRaw = currentRecord[col] || [];
-      if (Array.isArray(listRaw)) return listRaw;
-      else if (typeof listRaw === 'string') return listRaw.split(',').map(s => s.trim()).filter(Boolean);
-      return [];
+      return normalizeList(currentRecord[col]);
     });
-
     var maxLen = Math.max.apply(null, lists.map(l => l.length || 0));
-
     for (var i = 0; i < maxLen; i++) {
       var rowHtml = templateRowHtml;
       cols.forEach(function(col, idx) {
@@ -1258,21 +1136,87 @@ function insertTableWithLoop() {
 
   return newHtml;
 }
-    // --- HTML final ---
-    var tableHtml =
-      '<table style="border-collapse:collapse;width:100%;margin:10px 0;">' +
-      '<thead><tr>' + headerCells + '</tr></thead>' +
-      '<tbody>' +
-      '<!--' + loopInstruction + '-->' +
-      '<tr>' + dataCells + '</tr>' +
-      '<!--/LOOP-->' +
-      '</tbody>' +
-      '</table>';
 
-    editorInstance.selection.insertHTML(tableHtml);
+function insertTableWithLoop() {
+  if (!editorInstance) return;
 
-    showToast('Table inserted (' + loopType + ')', 'info');
-  });
+  // Restaurer la position du curseur
+  restoreEditorSelection();
+
+  // Construire les options des colonnes
+  var colOptionsHtml = '';
+  for (var i = 0; i < tableColumns.length; i++) {
+    colOptionsHtml += '<option value="' + tableColumns[i] + '">' + tableColumns[i] + '</option>';
+  }
+
+  // Construire le formulaire modal
+  var formHtml = '<div style="text-align:left;">' +
+
+    // Colonnes à afficher
+    '<div style="margin-bottom:15px;">' +
+      '<label style="display:block;margin-bottom:5px;font-weight:600;">' +
+        (currentLang === 'fr' ? 'Colonnes à afficher :' : 'Columns to display:') +
+      '</label>' +
+      '<div id="loop-cols-checkboxes" style="max-height:150px;overflow-y:auto;border:1px solid #eee;padding:8px;border-radius:4px;">';
+
+  // Toutes décochées par défaut
+  for (var j = 0; j < tableColumns.length; j++) {
+    formHtml += '<label style="display:block;margin-bottom:5px;cursor:pointer;">' +
+      '<input type="checkbox" value="' + tableColumns[j] + '" style="margin-right:8px;">' +
+      tableColumns[j] + '</label>';
+  }
+
+  formHtml += '</div></div>';
+
+  // Choix du mode LOOP:CELL
+  formHtml += '<div style="margin-bottom:15px;">' +
+    '<label style="display:block;margin-bottom:5px;font-weight:600;">' +
+      (currentLang === 'fr' ? 'Mode de boucle :' : 'Loop mode:') +
+    '</label>' +
+    '<select id="loop-cell-mode" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">' +
+      '<option value="vertical">' + (currentLang === 'fr' ? 'Vertical (1 valeur = 1 ligne)' : 'Vertical (1 value = 1 row)') + '</option>' +
+      '<option value="aligned">' + (currentLang === 'fr' ? 'Aligné (plusieurs colonnes en parallèle)' : 'Aligned (multiple columns in parallel)') + '</option>' +
+    '</select></div>';
+
+  // Affichage du modal
+  showModal(currentLang === 'fr' ? '📊 Tableau avec boucle' : '📊 Table with loop', formHtml)
+    .then(function(confirmed) {
+      if (!confirmed) return;
+
+      // Récupérer les colonnes sélectionnées
+      var checkboxes = document.querySelectorAll('#loop-cols-checkboxes input[type="checkbox"]:checked');
+      var selectedCols = [];
+      checkboxes.forEach(function(cb) { selectedCols.push(cb.value); });
+
+      if (selectedCols.length === 0) {
+        showToast(currentLang === 'fr' ? 'Veuillez sélectionner au moins une colonne' : 'Please select at least one column', 'error');
+        return;
+      }
+
+      // Récupérer le mode
+      var mode = document.getElementById('loop-cell-mode').value || 'vertical';
+
+      // Construire les en-têtes et cellules du tableau
+      var headerCells = '';
+      var dataCells = '';
+      selectedCols.forEach(function(col) {
+        headerCells += '<th style="border:1px solid #ccc;padding:8px;background:#f3f4f6;">' + col + '</th>';
+        dataCells += '<td style="border:1px solid #ccc;padding:8px;">{{' + col + '}}</td>';
+      });
+
+      // Générer le tableau avec LOOP:CELL
+      var tableHtml = '<table style="border-collapse:collapse;width:100%;margin:10px 0;">' +
+        '<thead><tr>' + headerCells + '</tr></thead>' +
+        '<tbody>' +
+        '<!--LOOP:CELL:' + selectedCols.join('|') + '|mode=' + mode + '-->' +
+        '<tr>' + dataCells + '</tr>' +
+        '<!--/LOOP-->' +
+        '</tbody></table>';
+
+      // Insérer dans l'éditeur
+      editorInstance.selection.insertHTML(tableHtml);
+      showToast(currentLang === 'fr' ? 'Tableau avec boucle inséré' : 'Table with loop inserted', 'info');
+    });
 }
 
 // Store last cursor position before clicking outside editor
@@ -1303,227 +1247,117 @@ function restoreEditorSelection() {
   }
 }
 
-function insertVariable(colName) {
-  if (!editorInstance) return;
-  
-  // Restore cursor position if it was saved
-  restoreEditorSelection();
-  
-  var varHtml = '<span style="background:#f3e8ff;color:#7c3aed;padding:2px 6px;border-radius:4px;font-weight:600;" contenteditable="false">{{' + colName + '}}</span>&nbsp;';
-  editorInstance.selection.insertHTML(varHtml);
-  showToast('{{' + colName + '}} inséré', 'info');
-}
+function renderLoopCell(currentRecord, templateRowHtml, loopInstruction) {
+  if (!loopInstruction.startsWith('LOOP:CELL:')) return templateRowHtml;
 
-// Edit existing loop in a table
-function editTableLoop(tableElement) {
-  if (!editorInstance || !tableElement) return;
-  
-  // Find the loop comment in the table
-  var tbody = tableElement.querySelector('tbody');
-  if (!tbody) return;
-  
-  var loopComment = null;
-  var currentFilterCol = '';
-  var currentFilterVal = '';
-  
-  // Search for loop comment in tbody
-  var isViewLinked = false;
-  var isViewSelect = false;
-  var isLinkedTable = false;
-  var currentViewId = '';
-  var currentLinkedTable = '';
-  var currentLinkedRefCol = '';
-  for (var i = 0; i < tbody.childNodes.length; i++) {
-    var node = tbody.childNodes[i];
-    if (node.nodeType === 8) { // Comment node
-      if (node.textContent === 'LOOP:*') {
-        loopComment = node;
-        isViewLinked = true;
-        break;
-      }
-      var viewMatch = node.textContent.match(/^LOOP:VIEW:(\d+)$/);
-      if (viewMatch) {
-        loopComment = node;
-        isViewSelect = true;
-        currentViewId = viewMatch[1];
-        break;
-      }
-      var tableMatch = node.textContent.match(/^LOOP:TABLE:([^:]+):(.+)$/);
-      if (tableMatch) {
-        loopComment = node;
-        isLinkedTable = true;
-        currentLinkedTable = tableMatch[1];
-        currentLinkedRefCol = tableMatch[2];
-        break;
-      }
-      var match = node.textContent.match(/^LOOP:([^=]+)=(.*)$/);
-      if (match) {
-        loopComment = node;
-        currentFilterCol = match[1];
-        currentFilterVal = match[2];
-        break;
-      }
+  var config = loopInstruction.replace('LOOP:CELL:', '');
+  var modeMatch = config.match(/mode=(\w+)/);
+  var mode = modeMatch ? modeMatch[1] : 'vertical';
+  config = config.replace(/\|?mode=\w+/, '');
+  var cols = config.split('|').map(c => c.trim()).filter(Boolean);
+
+  var newHtml = '';
+
+  function normalizeList(raw) {
+    if (!raw) return [];
+    if (Array.isArray(raw)) return raw;
+    if (typeof raw === 'string') {
+      try {
+        var parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
+      } catch(e) {}
+      return raw.split(',').map(s => s.trim()).filter(Boolean);
     }
+    return [raw];
   }
-  
-  if (!loopComment) {
-    showToast(currentLang === 'fr' ? 'Aucune boucle trouvée dans ce tableau' : 'No loop found in this table', 'error');
-    return;
-  }
-  
-  // For linked table loops, show full editing modal
-  if (isLinkedTable) {
-    // Build table selector options
-    var linkedTableOptions = '<option value="">' + (currentLang === 'fr' ? '-- Choisir une table --' : '-- Choose a table --') + '</option>';
-    for (var t = 0; t < allTables.length; t++) {
-      if (allTables[t] !== selectedTable) {
-        var selectedOpt = allTables[t] === currentLinkedTable ? 'selected' : '';
-        linkedTableOptions += '<option value="' + allTables[t] + '" ' + selectedOpt + '>' + allTables[t] + '</option>';
-      }
-    }
-    
-    var linkedFormHtml = '<div style="text-align:left;">' +
-      '<div style="margin-bottom:15px;">' +
-      '<label style="display:block;margin-bottom:5px;font-weight:600;">' + (currentLang === 'fr' ? 'Table liée :' : 'Linked table:') + '</label>' +
-      '<select id="edit-linked-table" onchange="updateEditLinkedTableColumns()" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">' + linkedTableOptions + '</select>' +
-      '</div>' +
-      '<div style="margin-bottom:15px;">' +
-      '<label style="display:block;margin-bottom:5px;font-weight:600;">' + (currentLang === 'fr' ? 'Colonne de référence (vers ' + selectedTable + ') :' : 'Reference column (to ' + selectedTable + '):') + '</label>' +
-      '<select id="edit-linked-ref-col" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">' +
-      '<option value="' + currentLinkedRefCol + '" selected>' + currentLinkedRefCol + '</option>' +
-      '</select>' +
-      '</div>' +
-      '</div>';
-    
-    // Show modal and handle confirmation
-    setTimeout(function() {
-      // Load columns for the current linked table
-      updateEditLinkedTableColumns();
-    }, 100);
-    
-    showModal(currentLang === 'fr' ? '🔗 Modifier le tableau lié' : '🔗 Edit linked table', linkedFormHtml).then(function(confirmed) {
-      if (!confirmed) return;
-      
-      var newLinkedTable = document.getElementById('edit-linked-table').value;
-      var newRefCol = document.getElementById('edit-linked-ref-col').value;
-      
-      if (!newLinkedTable || !newRefCol) {
-        showToast(currentLang === 'fr' ? 'Veuillez sélectionner une table et une colonne de référence' : 'Please select a table and reference column', 'error');
-        return;
-      }
-      
-      // Update the loop comment
-      loopComment.textContent = 'LOOP:TABLE:' + newLinkedTable + ':' + newRefCol;
-      
-      // Update editor content
-      var updatedHtml = tableElement.outerHTML;
-      
-      showToast(currentLang === 'fr' ? 'Boucle mise à jour' : 'Loop updated', 'success');
-    });
-    return;
-  }
-  
-  // Build column selector options
-  var colOptions = '';
-  for (var i = 0; i < tableColumns.length; i++) {
-    var selected = tableColumns[i] === currentFilterCol ? 'selected' : '';
-    colOptions += '<option value="' + tableColumns[i] + '" ' + selected + '>' + tableColumns[i] + '</option>';
-  }
-  
-  // Build view selector options
-  var viewOptions = '<option value="">' + (currentLang === 'fr' ? '-- Choisir une vue --' : '-- Choose a view --') + '</option>';
-  for (var v = 0; v < availableViews.length; v++) {
-    var viewName = availableViews[v].name;
-    var viewId = availableViews[v].id;
-    var hasFilters = availableViews[v].filters ? ' 🔍' : '';
-    var selectedView = String(viewId) === currentViewId ? 'selected' : '';
-    viewOptions += '<option value="' + viewId + '" ' + selectedView + '>' + viewName + hasFilters + '</option>';
-  }
-  
-  // Build value options for current column
-  var uniqueVals = getUniqueValuesForColumn(currentFilterCol || tableColumns[0]);
-  var valOptions = '<option value="">' + (currentLang === 'fr' ? '-- Choisir une valeur --' : '-- Choose a value --') + '</option>';
-  for (var j = 0; j < uniqueVals.length; j++) {
-    var selVal = uniqueVals[j] === currentFilterVal ? 'selected' : '';
-    valOptions += '<option value="' + uniqueVals[j] + '" ' + selVal + '>' + uniqueVals[j] + '</option>';
-  }
-  
-  // Determine which radio should be checked
-  var isFilterChecked = !isViewLinked && !isViewSelect;
-  
-  var formHtml = '<div style="text-align:left;">' +
-    '<div style="margin-bottom:15px;">' +
-    '<label style="display:block;margin-bottom:8px;font-weight:600;">' + (currentLang === 'fr' ? 'Type de tableau :' : 'Table type:') + '</label>' +
-    '<label style="display:block;margin-bottom:5px;cursor:pointer;">' +
-    '<input type="radio" name="edit-loop-type" value="view" ' + (isViewLinked ? 'checked' : '') + ' style="margin-right:8px;">' +
-    (currentLang === 'fr' ? 'Lié à la vue courante' : 'Linked to current view') + '</label>' +
-    '<label style="display:block;margin-bottom:5px;cursor:pointer;">' +
-    '<input type="radio" name="edit-loop-type" value="viewselect" ' + (isViewSelect ? 'checked' : '') + ' style="margin-right:8px;">' +
-    (currentLang === 'fr' ? 'Lié à une vue filtrée' : 'Linked to a filtered view') + '</label>' +
-    '<label style="display:block;margin-bottom:5px;cursor:pointer;">' +
-    '<input type="radio" name="edit-loop-type" value="filter" ' + (isFilterChecked ? 'checked' : '') + ' style="margin-right:8px;">' +
-    (currentLang === 'fr' ? 'Avec filtre manuel' : 'With manual filter') + '</label>' +
-    '</div>' +
-    '<div id="edit-view-select-options" style="' + (isViewSelect ? '' : 'display:none;') + 'border:1px solid #e5e7eb;padding:10px;border-radius:6px;margin-bottom:10px;background:#f0fdf4;">' +
-    '<label style="display:block;margin-bottom:5px;font-weight:600;">' + (currentLang === 'fr' ? 'Vue à utiliser :' : 'View to use:') + '</label>' +
-    '<select id="edit-loop-view-select" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">' + viewOptions + '</select>' +
-    '</div>' +
-    '<div id="edit-filter-options" style="' + (isFilterChecked ? '' : 'display:none;') + 'border:1px solid #e5e7eb;padding:10px;border-radius:6px;background:#f9fafb;">' +
-    '<div style="margin-bottom:10px;">' +
-    '<label style="display:block;margin-bottom:5px;font-weight:600;">' + (currentLang === 'fr' ? 'Colonne à filtrer :' : 'Column to filter:') + '</label>' +
-    '<select id="edit-loop-filter-col" onchange="updateEditLoopValueOptions()" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">' + colOptions + '</select>' +
-    '</div>' +
-    '<div style="margin-bottom:10px;">' +
-    '<label style="display:block;margin-bottom:5px;font-weight:600;">' + (currentLang === 'fr' ? 'Valeur à rechercher :' : 'Value to search:') + '</label>' +
-    '<select id="edit-loop-filter-val-select" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;margin-bottom:5px;">' + valOptions + '</select>' +
-    '<input type="text" id="edit-loop-filter-val" value="' + currentFilterVal + '" placeholder="' + (currentLang === 'fr' ? 'Ou saisir manuellement...' : 'Or type manually...') + '" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;box-sizing:border-box;">' +
-    '</div>' +
-    '</div>' +
-    '</div>';
-  
-  // Add event listeners for radio buttons after modal opens
-  setTimeout(function() {
-    var radios = document.querySelectorAll('input[name="edit-loop-type"]');
-    radios.forEach(function(radio) {
-      radio.addEventListener('change', function() {
-        var filterOptions = document.getElementById('edit-filter-options');
-        var viewSelectOptions = document.getElementById('edit-view-select-options');
-        if (filterOptions) {
-          filterOptions.style.display = this.value === 'filter' ? 'block' : 'none';
-        }
-        if (viewSelectOptions) {
-          viewSelectOptions.style.display = this.value === 'viewselect' ? 'block' : 'none';
-        }
+
+  if (mode === 'vertical') {
+    cols.forEach(function(col) {
+      var list = normalizeList(currentRecord[col]);
+      list.forEach(function(item) {
+        var value = (item && typeof item === 'object') ? (item.Name || item.label || item.id || '') : (item || '');
+        var rowHtml = templateRowHtml;
+        rowHtml = rowHtml.replace(new RegExp('{{\\s*' + col + '\\s*}}', 'g'), value);
+        newHtml += rowHtml;
       });
     });
-  }, 100);
-  
-  showModal(currentLang === 'fr' ? '✏️ Modifier la boucle' : '✏️ Edit loop', formHtml).then(function(confirmed) {
-    if (!confirmed) return;
-    
-    var loopType = document.querySelector('input[name="edit-loop-type"]:checked');
-    var loopTypeValue = loopType ? loopType.value : 'view';
-    
-    if (loopTypeValue === 'view') {
-      loopComment.textContent = 'LOOP:*';
-    } else if (loopTypeValue === 'viewselect') {
-      var viewSelect = document.getElementById('edit-loop-view-select');
-      var selectedViewId = viewSelect ? viewSelect.value : '';
-      if (selectedViewId) {
-        loopComment.textContent = 'LOOP:VIEW:' + selectedViewId;
-      } else {
-        loopComment.textContent = 'LOOP:*';
-      }
-    } else {
-      var newFilterCol = document.getElementById('edit-loop-filter-col').value;
-      var newFilterValSelect = document.getElementById('edit-loop-filter-val-select');
-      var newFilterValInput = document.getElementById('edit-loop-filter-val');
-      var newFilterVal = (newFilterValSelect && newFilterValSelect.value) || (newFilterValInput && newFilterValInput.value) || currentFilterVal;
-      loopComment.textContent = 'LOOP:' + newFilterCol + '=' + newFilterVal;
+  } else if (mode === 'aligned') {
+    var lists = cols.map(function(col) { return normalizeList(currentRecord[col]); });
+    var maxLen = Math.max.apply(null, lists.map(l => l.length || 0));
+    for (var i = 0; i < maxLen; i++) {
+      var rowHtml = templateRowHtml;
+      cols.forEach(function(col, idx) {
+        var val = lists[idx][i];
+        var value = (val && typeof val === 'object') ? (val.Name || val.label || val.id || '') : (val || '');
+        rowHtml = rowHtml.replace(new RegExp('{{\\s*' + col + '\\s*}}', 'g'), value);
+      });
+      newHtml += rowHtml;
     }
-    
-    showToast(currentLang === 'fr' ? 'Boucle modifiée !' : 'Loop updated!', 'success');
-    scheduleAutoSave();
+  }
+
+  return newHtml;
+}
+
+// ------------------------------
+// Fonction insertTableWithLoop
+// ------------------------------
+function insertTableWithLoop() {
+  if (!editorInstance) return;
+  restoreEditorSelection();
+
+  // Construire le formulaire modal
+  var formHtml = '<div style="text-align:left;">' +
+    '<div style="margin-bottom:15px;">' +
+      '<label style="display:block;margin-bottom:5px;font-weight:600;">Colonnes à afficher :</label>' +
+      '<div id="loop-cols-checkboxes" style="max-height:150px;overflow-y:auto;border:1px solid #eee;padding:8px;border-radius:4px;">';
+
+  tableColumns.forEach(function(col) {
+    formHtml += '<label style="display:block;margin-bottom:5px;cursor:pointer;">' +
+      '<input type="checkbox" value="' + col + '" style="margin-right:8px;">' +
+      col + '</label>';
+  });
+
+  formHtml += '</div></div>';
+
+  formHtml += '<div style="margin-bottom:15px;">' +
+    '<label style="display:block;margin-bottom:5px;font-weight:600;">Mode de boucle :</label>' +
+    '<select id="loop-cell-mode" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">' +
+      '<option value="vertical">Vertical (1 valeur = 1 ligne)</option>' +
+      '<option value="aligned">Aligné (plusieurs colonnes en parallèle)</option>' +
+    '</select></div>';
+
+  showModal('📊 Tableau avec boucle', formHtml).then(function(confirmed) {
+    if (!confirmed) return;
+
+    // Colonnes sélectionnées
+    var checkboxes = document.querySelectorAll('#loop-cols-checkboxes input[type="checkbox"]:checked');
+    var selectedCols = [];
+    checkboxes.forEach(cb => selectedCols.push(cb.value));
+    if (selectedCols.length === 0) {
+      showToast('Veuillez sélectionner au moins une colonne', 'error');
+      return;
+    }
+
+    var mode = document.getElementById('loop-cell-mode').value || 'vertical';
+
+    // Construire HTML tableau
+    var headerCells = '';
+    var dataCells = '';
+    selectedCols.forEach(function(col) {
+      headerCells += '<th style="border:1px solid #ccc;padding:8px;background:#f3f4f6;">' + col + '</th>';
+      dataCells += '<td style="border:1px solid #ccc;padding:8px;">{{' + col + '}}</td>';
+    });
+
+    var tableHtml = '<table style="border-collapse:collapse;width:100%;margin:10px 0;">' +
+      '<thead><tr>' + headerCells + '</tr></thead>' +
+      '<tbody>' +
+      '<!--LOOP:CELL:' + selectedCols.join('|') + '|mode=' + mode + '-->' +
+      '<tr>' + dataCells + '</tr>' +
+      '<!--/LOOP-->' +
+      '</tbody></table>';
+
+    editorInstance.selection.insertHTML(tableHtml);
+    showToast('Tableau avec boucle inséré', 'info');
   });
 }
 

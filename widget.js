@@ -776,7 +776,6 @@ function insertImageVariable() {
       • Chemin + URL base (config PDF)\
     </div>\
     <div style="display:flex;gap:10px;">\
-      <button id="img-insert" style="flex:1;padding:10px;background:#22c55e;color:white;border:none;border-radius:6px;cursor:pointer;">' + (currentLang === 'fr' ? 'Insérer' : 'Insert') + '</button>\
       <button id="img-cancel" style="flex:1;padding:10px;background:#f1f5f9;border:none;border-radius:6px;cursor:pointer;">' + (currentLang === 'fr' ? 'Annuler' : 'Cancel') + '</button>\
     </div>\
   ';

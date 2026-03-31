@@ -1082,9 +1082,9 @@ function updateEditLoopValueOptions() {
 }
 
 function renderLoopCell(currentRecord, templateRowHtml, loopInstruction) {
-  if (loopInstruction.startsWith('LOOP:CELL:')) {
-  return renderLoopCell(currentRecord, templateRowHtml, loopInstruction);
-}
+  if (!loopInstruction.startsWith('LOOP:CELL:')) {
+    return templateRowHtml; // Retourne le HTML inchangé si ce n'est pas une instruction LOOP:CELL
+  }
 
   // Récupérer la configuration
   var config = loopInstruction.replace('LOOP:CELL:', '');
@@ -1095,7 +1095,7 @@ function renderLoopCell(currentRecord, templateRowHtml, loopInstruction) {
 
   var newHtml = '';
 
-  // Normaliser les valeurs multi-références / JSON / chaînes /
+  // Fonction pour normaliser les valeurs (multi-références, JSON, chaînes)
   function normalizeList(raw) {
     if (!raw) return [];
     if (Array.isArray(raw)) return raw;

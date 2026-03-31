@@ -1080,8 +1080,11 @@ function updateEditLoopValueOptions() {
     valSelect.appendChild(opt);
   }
 }
+
 function renderLoopCell(currentRecord, templateRowHtml, loopInstruction) {
-  if (!loopInstruction.startsWith('LOOP:CELL:')) return templateRowHtml;
+  if (loopInstruction.startsWith('LOOP:CELL:')) {
+  return renderLoopCell(currentRecord, templateRowHtml, loopInstruction);
+}
 
   // Récupérer la configuration
   var config = loopInstruction.replace('LOOP:CELL:', '');
@@ -1092,7 +1095,7 @@ function renderLoopCell(currentRecord, templateRowHtml, loopInstruction) {
 
   var newHtml = '';
 
-  // Normaliser les valeurs multi-références / JSON / chaînes
+  // Normaliser les valeurs multi-références / JSON / chaînes /
   function normalizeList(raw) {
     if (!raw) return [];
     if (Array.isArray(raw)) return raw;
